@@ -1,15 +1,16 @@
 # YouTube Multiselect (Custom)
 
-A custom Chrome extension that works directly inside YouTube. The interface follows Multiselect for YouTube: a masthead toggle, checkboxes on video rows, and a compact bottom action bar.
+A custom Chrome extension that works directly inside YouTube. The interface follows Multiselect for YouTube: a masthead toggle, clickable video cards, and a compact bottom action bar.
 
 ## Features
 
-- Select videos directly on YouTube, including loaded playlist, search, and home-page rows.
+- Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards turn blue and show a corner checkmark.
+- Select all or deselect all from the action bar.
 - **Copy selected links** as plain text: one clean YouTube URL per line, ready to paste into NotebookLM.
 - Copy selections into a durable local clipboard; Cut queues a move without removing originals.
 - Paste to another playlist using YouTube's signed-in session.
 - Verify destination copies before offering a separate confirmation to remove originals.
-- Filter selection by text, select duplicates, export links, and keep local operation backups.
+- A small menu contains only Cut, Copy, Save to playlist, and Copy links. Operation backups stay available if a step fails.
 - Use YouTube's light/dark colors. All controls and dialogs stay on the YouTube page.
 
 ## Install
@@ -24,7 +25,7 @@ No build step, API key, or separate application is required.
 
 ## Copy links for NotebookLM
 
-Turn multiselect on, tick the videos, and click **Copy links** in the action bar. Paste the result into NotebookLM's website source input.
+Turn multiselect on, click the video cards, and click **Copy links** in the action bar. Paste the result into NotebookLM's website source input.
 
 ```text
 https://www.youtube.com/watch?v=abcdefghijk
@@ -34,7 +35,7 @@ https://www.youtube.com/watch?v=lmnopqrstuv
 ## Move videos
 
 1. Select source videos and choose **Cut**. The originals stay in place; the selection is stored in this Chrome profile.
-2. Choose **Paste** and select a destination playlist.
+2. Choose **Save to playlist** and select a destination. It uses your saved Cut selection, including after navigation or a reload.
 3. The extension adds copies and checks YouTube's returned playlist contents.
 4. Only after the copies are verified does it offer to remove the exact original playlist entries. Review that list and confirm.
 
@@ -48,7 +49,7 @@ Backups preserve video links and the original playlist contents. Restoring video
 
 YouTube's web playlist interfaces are undocumented and can change. Watch Later is unavailable through the supported YouTube Data API. This extension deliberately disables changes if it cannot identify exact playlist occurrences or complete a scan. Link copying works from loaded rows even when playlist editing is unavailable.
 
-If a playlist cannot be read, open **More actions → Playlist reader details** and choose the source or destination. This read-only check shows completeness, video count, and a small structural report without cookies, authorization headers, or raw video data. After updating the source files, reload the custom extension in `chrome://extensions` and refresh YouTube.
+If a playlist cannot be read, open the error’s **Details → Check playlist reader** and choose the source or destination. This read-only check shows completeness, video count, and a small structural report without cookies, authorization headers, or raw video data. After updating the source files, reload the custom extension in `chrome://extensions` and refresh YouTube.
 
 ## Privacy
 
@@ -63,6 +64,6 @@ npm test
 npm run validate
 ```
 
-Tests cover exact duplicate occurrences, scoped pagination, account changes, lost responses, durable Cut/Paste behavior, failed copies, and storage failure before writes. Browser fixtures verify the inline selection bar, link format, and rerender behavior. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
+Tests cover exact duplicate occurrences, scoped pagination, modern empty playlist identity and ownership, account changes, lost responses, durable Cut/Save behavior, failed copies, and storage failure before writes. Browser fixtures verify full-card selection, the four-action menu, saved Cut selections, themes, narrow layouts, link format, and rerender behavior. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
 
 Sources: [Original interface](https://chromewebstore.google.com/detail/multiselect-for-youtube/gpgbiinpmelaihndlegbgfkmnpofgfei), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [Watch Later API limitation](https://developers.google.com/youtube/v3/docs/playlistItems/list), [YouTube.js playlist action reference](https://github.com/LuanRT/YouTube.js/blob/main/src/core/managers/PlaylistManager.ts).

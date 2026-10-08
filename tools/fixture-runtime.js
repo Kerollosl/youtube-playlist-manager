@@ -6,7 +6,7 @@ const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
 window.chrome = {
   runtime: {
-    getManifest: () => ({ version: '1.0.1' }),
+    getManifest: () => ({ version: '1.1.0' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
       if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
@@ -22,6 +22,7 @@ window.chrome = {
 };
 // Make this local fixture act like the YouTube playlist route for content code.
 const url = new URL(location.href); url.searchParams.set('list', 'WL'); history.replaceState(null, '', url);
+if (url.searchParams.get('theme') === 'light') { document.documentElement.removeAttribute('dark'); document.documentElement.dataset.fixtureTheme = 'light'; }
 Object.defineProperty(navigator, 'clipboard', { value: { writeText: async text => { document.getElementById('results').textContent = text; } } });
 document.getElementById('rerender').addEventListener('click', () => {
   const rows = document.getElementById('rows'), copy = rows.cloneNode(true);

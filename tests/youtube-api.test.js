@@ -223,13 +223,141 @@ test('authoritative header identity and editability support empty playlists with
 
 test('empty playlist header edit endpoint must target exact playlist', async () => {
   const data = emptyPlaylist();
+  delete data.microformat;
   data.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
     playlistEditEndpoint: { playlistId: 'PLtest', actions: [{ action: 'ACTION_SET_PLAYLIST_NAME' }] }
   };
   const { run, calls } = page([data]);
   const result = await run({ type: 'read', playlistId: 'PLtest' });
   assert.equal(result.editable, true);
+  assert.equal(result.complete, true);
+  assert.equal(result.diagnostics.identity.headerActions, true);
   assert.equal(calls.length, 1);
+});
+
+test('modern empty header playlist navigation proves identity and uses a real picker video', async () => {
+  const data = emptyPlaylist();
+  delete data.microformat;
+  data.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
+    flexibleActionsViewModel: { actionsRows: [{ actions: [{ buttonViewModel: {
+      onTap: { innertubeCommand: { browseEndpoint: { browseId: 'VLPLtest' } } }
+    } }] }] }
+  };
+  const { run, calls } = page([data, picker()]);
+  const result = await run({ type: 'read', playlistId: 'PLtest', pickerVideoId: VIDEO });
+  assert.equal(result.complete, true);
+  assert.equal(result.editable, true);
+  assert.deepEqual(Array.from(calls[1].body.videoIds), [VIDEO]);
+  assert.equal(result.diagnostics.identity.headerActions, true);
+  assert.ok(result.diagnostics.headerIdentityPaths[0].endsWith('.browseEndpoint.browseId'));
+  assert.ok(result.diagnostics.headerActionSchemaPaths.some(path => path.endsWith('.buttonViewModel')));
+  assert.ok(!JSON.stringify(result.diagnostics).includes('PLtest'));
+});
+
+test('modern header playlist references reject conflicting IDs before picker', async () => {
+  for (const reference of [
+    { playlistEditEndpoint: { playlistId: 'PLwrong' } },
+    { browseEndpoint: { browseId: 'VLPLwrong' } }
+  ]) {
+    const data = emptyPlaylist();
+    data.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
+      commands: [{ playlistEditEndpoint: { playlistId: 'PLtest' } }, reference]
+    };
+    const { run, calls } = page([data]);
+    await assert.rejects(run({ type: 'read', playlistId: 'PLtest' }), /different playlist/);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('unrelated identity and metadata title cannot establish an empty playlist', async () => {
+  const data = emptyPlaylist();
+  delete data.microformat;
+  data.metadata = { playlistMetadataRenderer: { title: 'Test' } };
+  data.sidebar = { playlistEditEndpoint: { playlistId: 'PLtest' } };
+  data.header.pageHeaderRenderer.content.pageHeaderViewModel.title = { playlistId: 'PLtest' };
+  const { run, calls } = page([data, picker('PLunrelated')]);
+  const result = await run({ type: 'read', playlistId: 'PLtest' });
+  assert.equal(result.complete, false);
+  assert.equal(calls.length, 2);
+});
+
+test('ID-free modern empty response uses exact unique owned picker ID and metadata title', async () => {
+  const data = emptyPlaylist();
+  delete data.microformat;
+  data.metadata = { playlistMetadataRenderer: { title: 'Test' } };
+  const { run, calls } = page([data, picker()]);
+  const result = await run({ type: 'read', playlistId: 'PLtest', pickerVideoId: VIDEO });
+  assert.equal(result.complete, true);
+  assert.equal(result.editable, true);
+  assert.equal(result.diagnostics.identity.ownedPicker, true);
+  assert.equal(result.items.length, 0);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(Array.from(calls[1].body.videoIds), [VIDEO]);
+});
+
+test('ID-free empty response rejects absent, conflicting and ambiguous owned picker evidence', async () => {
+  const wrongTitle = picker();
+  wrongTitle.contents[0].addToPlaylistRenderer.playlists[0].playlistAddToOptionRenderer.title.simpleText = 'Different';
+  const duplicateTitle = picker();
+  duplicateTitle.contents[0].addToPlaylistRenderer.playlists.push({
+    playlistAddToOptionRenderer: { playlistId: 'PLother', title: { simpleText: 'Test' } }
+  });
+  const duplicateId = picker();
+  duplicateId.contents[0].addToPlaylistRenderer.playlists.push({
+    playlistAddToOptionRenderer: { playlistId: 'PLtest', title: { simpleText: 'Other title' } }
+  });
+  for (const response of [picker('PLwrong'), wrongTitle, duplicateTitle, duplicateId,
+    { contents: [] }, new Error('offline')]) {
+    const data = emptyPlaylist();
+    delete data.microformat;
+    data.metadata = { playlistMetadataRenderer: { title: 'Test' } };
+    const result = await page([data, response]).run({ type: 'read', playlistId: 'PLtest', pickerVideoId: VIDEO });
+    assert.equal(result.complete, false);
+    assert.equal(result.editable, false);
+    assert.equal(result.diagnostics.identity.ownedPicker, false);
+  }
+});
+
+test('owned picker cannot override contradictory identity, positive count or hidden continuation', async () => {
+  for (const modify of [
+    data => { data.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
+      playlistEditEndpoint: { playlistId: 'PLwrong' }
+    }; },
+    data => { data.header.pageHeaderRenderer.content.pageHeaderViewModel.metadata = {
+      contentMetadataViewModel: { metadataRows: [{ metadataParts: [{ text: { content: '1 video' } }] }] }
+    }; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer
+      .continuations = [{ nextContinuationData: { continuation: 'hidden' } }]; }
+  ]) {
+    const data = emptyPlaylist();
+    delete data.microformat;
+    data.metadata = { playlistMetadataRenderer: { title: 'Test' } };
+    modify(data);
+    const { run, calls } = page([data, picker()]);
+    try {
+      assert.equal((await run({ type: 'read', playlistId: 'PLtest', pickerVideoId: VIDEO })).complete, false);
+    } catch (error) {
+      assert.match(error.message, /different playlist/);
+    }
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('ID-free empty verification aborts if account changes during picker response', async () => {
+  const data = emptyPlaylist();
+  delete data.microformat;
+  data.metadata = { playlistMetadataRenderer: { title: 'Test' } };
+  const { run } = page([data, (_call, config) => {
+    config.DATASYNC_ID = 'another-account';
+    return { ok: true, status: 200, json: async () => picker() };
+  }]);
+  await assert.rejects(run({ type: 'read', playlistId: 'PLtest', pickerVideoId: VIDEO }), /account changed/);
+});
+
+test('read rejects invalid picker video IDs before fetch', async () => {
+  const { run, calls } = page([]);
+  await assert.rejects(run({ type: 'read', playlistId: 'PLtest', pickerVideoId: 'invalid' }), /picker video/);
+  assert.equal(calls.length, 0);
 });
 
 test('missing list ID can use matching canonical identity but rejects disagreement', async () => {

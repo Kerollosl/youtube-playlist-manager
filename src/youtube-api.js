@@ -14,7 +14,7 @@ export async function youtubeCommand(command) {
   const occurrenceId = value => typeof value === 'string' && value.length > 0
     && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value);
   const commandSchemas = {
-    read: ['type', 'playlistId'], edit: ['type', 'playlistId', 'action', 'expectedFingerprint'],
+    read: ['type', 'playlistId', 'pickerVideoId'], edit: ['type', 'playlistId', 'action', 'expectedFingerprint'],
     playlists: ['type', 'videoId'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
   };
   if (!Object.hasOwn(commandSchemas, command?.type) || !ownKeys(command, commandSchemas[command.type])) {
@@ -26,6 +26,9 @@ export async function youtubeCommand(command) {
   }
   if (['read', 'edit'].includes(command.type) && !id(command.playlistId)) {
     throw new Error('A valid playlist ID is required.');
+  }
+  if (command.type === 'read' && command.pickerVideoId !== undefined && !videoId(command.pickerVideoId)) {
+    throw new Error('Invalid playlist picker video ID.');
   }
   if (command.type === 'edit') {
     const action = command.action;
@@ -189,6 +192,32 @@ export async function youtubeCommand(command) {
   const data = await request('browse', { browseId: `VL${command.playlistId}` });
   const lists = containers(data.contents, 'playlistVideoListRenderer');
   const header = data.header?.playlistHeaderRenderer;
+  const modernActions = data.header?.pageHeaderRenderer?.content?.pageHeaderViewModel?.actions;
+  const actionReferences = [];
+  const headerSchemaPaths = [];
+  // The modern header puts playlist identity inside its action commands rather
+  // than on the header itself. Restrict references to that header's actions;
+  // unrelated body/sidebar links must never identify this playlist.
+  function inspectActions(node, path = 'actions', depth = 0) {
+    if (!node || typeof node !== 'object' || depth > 30) return;
+    if (Array.isArray(node)) {
+      for (const child of node) inspectActions(child, `${path}[]`, depth + 1);
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      // Diagnostics contain schema paths only, never IDs, labels, tokens or
+      // credential values. Unknown dynamic keys are omitted as well.
+      if (!/^[A-Za-z][A-Za-z0-9_]{0,79}$/.test(key)) continue;
+      const childPath = `${path}.${key}`;
+      if (/Renderer$|ViewModel$|Endpoint$|Command$/.test(key)
+        && headerSchemaPaths.length < 100 && !headerSchemaPaths.includes(childPath)) headerSchemaPaths.push(childPath);
+      if (key === 'playlistId' && id(value)) actionReferences.push({ path: childPath, id: value });
+      if (key === 'browseId' && path.endsWith('.browseEndpoint') && typeof value === 'string'
+        && value.startsWith('VL') && id(value.slice(2))) actionReferences.push({ path: childPath, id: value.slice(2) });
+      inspectActions(value, childPath, depth + 1);
+    }
+  }
+  inspectActions(modernActions);
   const tabs = data.contents?.twoColumnBrowseResultsRenderer?.tabs;
   const tabRenderers = Array.isArray(tabs) ? tabs.map(tab => tab.tabRenderer).filter(Boolean) : [];
   const selectedTabs = tabRenderers.filter(tab => tab.selected === true);
@@ -207,7 +236,8 @@ export async function youtubeCommand(command) {
         && url.pathname === '/playlist') canonicalId = url.searchParams.get('list');
     } catch { /* An unrecognized URL cannot establish identity. */ }
   }
-  const identityIds = [...lists.map(list => list.playlistId), header?.playlistId, canonicalId].filter(Boolean);
+  const identityIds = [...lists.map(list => list.playlistId), header?.playlistId, canonicalId,
+    ...actionReferences.map(reference => reference.id)].filter(Boolean);
   if (identityIds.some(playlistId => playlistId !== command.playlistId)) {
     throw new Error('YouTube returned a different playlist. Refresh the page.');
   }
@@ -222,13 +252,12 @@ export async function youtubeCommand(command) {
       microformatRenderers: Object.keys(data.microformat || {}),
       selectedBodyRenderers: Object.keys(selectedBody || {}),
       bodyRowRenderers: [...new Set(bodyRows.flatMap(row => Object.keys(row || {}).filter(key => key.endsWith('Renderer'))))],
+      headerActionSchemaPaths: headerSchemaPaths,
+      headerIdentityPaths: [...new Set(actionReferences.map(reference => reference.path))].slice(0, 100),
       identity: { list: lists.some(list => list.playlistId === command.playlistId),
-        header: header?.playlistId === command.playlistId, canonical: canonicalId === command.playlistId }
+        header: header?.playlistId === command.playlistId, canonical: canonicalId === command.playlistId,
+        headerActions: actionReferences.some(reference => reference.id === command.playlistId), ownedPicker: false }
     } };
-  if (!identityIds.length) {
-    warnings.push('YouTube did not identify the requested playlist.');
-    return result;
-  }
   if (!lists.length) {
     // Empty playlists have a terminal message instead of a video list. Accept
     // only the observed exact marker in the selected tab's ordinary body.
@@ -264,16 +293,52 @@ export async function youtubeCommand(command) {
       warnings.push('YouTube playlist structure is unrecognized. No complete snapshot is available.');
       return result;
     }
+    let pickerOptions = null;
+    async function emptyPickerOptions() {
+      if (pickerOptions !== null) return pickerOptions;
+      const picker = await request('playlist/get_add_to_playlist', {
+        videoIds: command.pickerVideoId ? [command.pickerVideoId] : []
+      });
+      assertSession();
+      const menus = containers(picker.contents, 'addToPlaylistRenderer');
+      pickerOptions = menus.length === 1 && Array.isArray(menus[0]?.playlists)
+        ? menus[0].playlists.map(row => row.playlistAddToOptionRenderer)
+          .filter(option => option && id(option.playlistId)) : [];
+      return pickerOptions;
+    }
+    if (!identityIds.length) {
+      // Some authenticated empty playlist responses omit IDs even in the
+      // modern header. Match the targeted browse's metadata against exactly
+      // one owned picker option, including its requested ID and unique title.
+      // An empty message or title alone can never establish identity.
+      const metadataTitle = data.metadata?.playlistMetadataRenderer?.title;
+      if (typeof metadataTitle !== 'string' || !metadataTitle.trim()) {
+        warnings.push('YouTube did not identify the requested playlist.');
+        return result;
+      }
+      try {
+        const options = await emptyPickerOptions();
+        const titleMatches = options.filter(option => text(option.title) === metadataTitle);
+        const idMatches = options.filter(option => option.playlistId === command.playlistId);
+        result.diagnostics.identity.ownedPicker = titleMatches.length === 1 && idMatches.length === 1
+          && titleMatches[0] === idMatches[0];
+      } catch {
+        assertSession();
+        warnings.push('Could not verify the empty playlist with your YouTube playlist picker.');
+      }
+      if (!result.diagnostics.identity.ownedPicker) {
+        warnings.push('YouTube did not identify the requested playlist.');
+        return result;
+      }
+    }
     result.complete = true;
     result.pages = 1;
     result.editable = header?.isEditable === true
-      || containers(data.header, 'playlistEditEndpoint').some(endpoint => endpoint.playlistId === command.playlistId);
+      || containers(header || modernActions, 'playlistEditEndpoint').some(endpoint => endpoint.playlistId === command.playlistId);
     if (!result.editable) {
       try {
-        const picker = await request('playlist/get_add_to_playlist', { videoIds: [] });
-        const menus = containers(picker.contents, 'addToPlaylistRenderer');
-        result.editable = menus.length === 1 && Array.isArray(menus[0]?.playlists)
-          && menus[0].playlists.some(row => row.playlistAddToOptionRenderer?.playlistId === command.playlistId);
+        const options = await emptyPickerOptions();
+        result.editable = options.some(option => option.playlistId === command.playlistId);
       } catch (error) {
         warnings.push('Could not verify whether this empty playlist is editable.');
         // A changed session invalidates the entire read, including empty reads.
@@ -284,6 +349,10 @@ export async function youtubeCommand(command) {
       }
     }
     assertSession();
+    return result;
+  }
+  if (!identityIds.length) {
+    warnings.push('YouTube did not identify the requested playlist.');
     return result;
   }
   if (lists.length !== 1 || !Array.isArray(lists[0]?.contents)) {

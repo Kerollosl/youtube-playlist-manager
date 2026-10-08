@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 let listener;
 let data = {};
 let edits = [];
+let reads = [];
 let fingerprints = 'account-a';
 const item = { setVideoId: 'one', videoId: 'abcdefghijk', title: 'One', index: 0, durationSeconds: 90, channel: 'Channel' };
 let playlists;
 const clone = value => structuredClone(value);
 function reset() {
-  data = {}; edits = []; fingerprints = 'account-a';
+  data = {}; edits = []; reads = []; fingerprints = 'account-a';
   playlists = {
     WL: { playlistId: 'WL', complete: true, editable: true, canReorder: true, fingerprint: fingerprints, items: [clone(item)] },
     PLtarget: { playlistId: 'PLtarget', complete: true, editable: true, fingerprint: fingerprints, items: [] }
@@ -23,7 +24,7 @@ globalThis.chrome = {
     set: async update => { data = { ...data, ...clone(update) }; }
   } },
   scripting: { executeScript: async ({ args: [command] }) => {
-    if (command.type === 'read') return [{ result: { ok: true, ...clone(playlists[command.playlistId]), fingerprint: fingerprints } }];
+    if (command.type === 'read') { reads.push(clone(command)); return [{ result: { ok: true, ...clone(playlists[command.playlistId]), fingerprint: fingerprints } }]; }
     if (command.type === 'playlists') return [{ result: { ok: true, fingerprint: fingerprints, playlists: [] } }];
     assert.equal(command.expectedFingerprint, fingerprints);
     edits.push(clone(command));
@@ -52,11 +53,25 @@ test('paste cut selection verifies copies and leaves source pending explicit fin
   assert.equal(data.activeJob.phase, 'ready_to_remove');
   assert.equal(playlists.WL.items.length, 1);
   assert.equal(playlists.PLtarget.items.length, 1);
+  assert.ok(reads.filter(read => read.playlistId === 'PLtarget').every(read => read.pickerVideoId === item.videoId));
   const finish = await send({ type: 'FINISH_MOVE', jobId: data.activeJob.id });
   assert.equal(finish.ok, true);
   assert.equal(data.queue, null);
   assert.equal(playlists.WL.items.length, 0);
   assert.equal(playlists.PLtarget.items.length, 1);
+});
+test('read-only diagnostics carry a selected video or durable saved probe without editing', async () => {
+  reset();
+  const selected = await send({ type: 'READ', playlistId: 'PLtarget', pickerVideoId: item.videoId });
+  assert.equal(selected.ok, true);
+  assert.equal(reads.at(-1).pickerVideoId, item.videoId);
+  data.queue = { items: [item] };
+  const saved = await send({ type: 'READ', playlistId: 'PLtarget' });
+  assert.equal(saved.ok, true);
+  assert.equal(reads.at(-1).pickerVideoId, item.videoId);
+  const bad = await send({ type: 'READ', playlistId: 'PLtarget', pickerVideoId: 'invalid' });
+  assert.equal(bad.ok, false);
+  assert.equal(edits.length, 0);
 });
 test('account switch after review prevents direct operation before any edits', async () => {
   reset(); fingerprints = 'account-b';

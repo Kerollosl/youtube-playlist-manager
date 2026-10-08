@@ -4,6 +4,14 @@ import { assertAccount, assertComplete, exactItems, copyItems, removeItems, asse
 let busy = false;
 let lastEditAt = 0;
 const validPlaylist = id => typeof id === 'string' && /^[A-Za-z0-9_-]{2,128}$/.test(id);
+const validVideo = id => typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id);
+const read = (tabId, playlistId, pickerVideoId) => api(tabId, { type: 'read', playlistId,
+  ...(validVideo(pickerVideoId) ? { pickerVideoId } : {}) });
+
+async function savedProbe() {
+  const { queue, activeJob, history = [] } = await chrome.storage.local.get(['queue', 'activeJob', 'history']);
+  return [queue, activeJob, ...history].flatMap(job => job?.items || []).find(item => validVideo(item.videoId))?.videoId;
+}
 
 async function api(tabId, command) {
   const tab = await chrome.tabs.get(tabId);
@@ -33,9 +41,10 @@ async function archive(job) {
 async function run(message) {
   if (message.type === 'READ') {
     if (!validPlaylist(message.playlistId)) throw new Error('Enter a valid playlist URL or ID.');
-    return api(message.tabId, { type: 'read', playlistId: message.playlistId });
+    if (message.pickerVideoId !== undefined && !validVideo(message.pickerVideoId)) throw new Error('Invalid video ID for playlist lookup.');
+    return read(message.tabId, message.playlistId, message.pickerVideoId || await savedProbe());
   }
-  if (message.type === 'PLAYLISTS') return api(message.tabId, { type: 'playlists', videoId: message.videoId });
+  if (message.type === 'PLAYLISTS') return api(message.tabId, { type: 'playlists', videoId: message.videoId || await savedProbe() });
   if (message.type === 'STATUS') {
     const stored = await chrome.storage.local.get(['activeJob', 'history', 'queue']);
     return { ...stored, busy };
@@ -74,14 +83,14 @@ async function run(message) {
     if (message.type === 'FINISH_MOVE') {
       job = activeJob;
       if (job?.phase !== 'ready_to_remove' || job.kind !== 'move' || message.jobId !== job.id) throw new Error('There is no verified move to finish.');
-      const source = await api(message.tabId, { type: 'read', playlistId: job.sourceId });
+      const source = await read(message.tabId, job.sourceId, job.items[0]?.videoId);
       assertAccount(source, job.fingerprint);
-      const destination = await api(message.tabId, { type: 'read', playlistId: job.targetId });
+      const destination = await read(message.tabId, job.targetId, job.items[0]?.videoId);
       assertCopied(job, destination);
       if (!source.editable) throw new Error('The source playlist is not editable.');
       job.phase = 'removing';
       await save(job);
-      await removeItems(job, makeIO(message.tabId, job.fingerprint));
+      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
       job.phase = 'completed';
       await archive(job);
       return { job };
@@ -114,20 +123,20 @@ async function run(message) {
     job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now() };
     if (kind === 'copy' || kind === 'move') {
       if (!validPlaylist(message.targetId) || message.targetId === sourceId) throw new Error('Choose a different destination playlist.');
-      const target = await api(message.tabId, { type: 'read', playlistId: message.targetId });
+      const target = await read(message.tabId, message.targetId, items[0]?.videoId);
       assertAccount(target, fingerprint);
       if (!target.editable) throw new Error('The destination playlist is not editable.');
       job.targetId = message.targetId;
       job.targetBefore = target;
       job.phase = 'copying';
       await save(job);
-      await copyItems(job, makeIO(message.tabId, job.fingerprint));
+      await copyItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
       if (kind === 'move') { job.phase = 'ready_to_remove'; await save(job); }
       else { job.phase = 'completed'; await archive(job); }
     } else if (kind === 'remove') {
       job.phase = 'removing';
       await save(job);
-      await removeItems(job, makeIO(message.tabId, job.fingerprint));
+      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
       job.phase = 'completed';
       await archive(job);
     } else {
@@ -171,9 +180,9 @@ async function run(message) {
   } finally { busy = false; }
 }
 
-function makeIO(tabId, expectedFingerprint) {
+function makeIO(tabId, expectedFingerprint, pickerVideoId) {
   return {
-    read: playlistId => api(tabId, { type: 'read', playlistId }),
+    read: playlistId => read(tabId, playlistId, pickerVideoId),
     edit: (playlistId, action) => api(tabId, { type: 'edit', playlistId, action, expectedFingerprint }),
     save,
   };
