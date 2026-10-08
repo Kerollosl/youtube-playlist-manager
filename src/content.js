@@ -56,11 +56,19 @@
   function messageDialog(title, text) { const body = dialog(title); body.append(element('p', text, 'error-copy')); if (playlistId()) body.append(button('Check playlist reader', readerDialog)); footer(body); }
   function announce(text) { const full = String(text || ''); notice(full.length > 140 ? `${full.slice(0, 110).trim()}…` : full, full.length > 140 ? 'Details' : null, () => messageDialog('Operation details', full)); }
   function refreshNotice(text) { notice(text, 'Refresh', () => location.reload(), true); }
-  function report(error) { const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
-  async function send(type, values = {}) { const result = await chrome.runtime.sendMessage({ type, ...values }); if (!result?.ok) throw new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.'); return result; }
+  function report(error) { if (error?.refreshPage) { refreshNotice(error.message); return; } const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
+  async function send(type, values = {}) {
+    const disconnected = () => Object.assign(new Error('Extension updated. Refresh YouTube to reconnect.'), { refreshPage: true });
+    if (typeof chrome === 'undefined' || typeof chrome.runtime?.sendMessage !== 'function') throw disconnected();
+    let result;
+    try { result = await chrome.runtime.sendMessage({ type, ...values }); }
+    catch (error) { if (/extension context invalidated/i.test(error.message || '')) throw disconnected(); throw error; }
+    if (!result?.ok) throw new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.');
+    return result;
+  }
   function canonical(item) { return { ...item, key: item.setVideoId ? `entry:${item.setVideoId}` : item.key }; }
   function info(row) {
-    const anchor = row.querySelector('a#video-title,a#video-title-link,a[href*="/watch?v="],a[href*="/shorts/"]');
+    const anchor = row.querySelector('a#video-title,a#video-title-link') || row.querySelector('a[href*="/watch?v="],a[href*="/shorts/"]');
     if (!anchor) return null;
     let url; try { url = new URL(anchor.href, location.origin); } catch { return null; }
     const videoId = url.searchParams.get('v') || url.pathname.match(/^\/shorts\/([A-Za-z0-9_-]{11})/)?.[1];

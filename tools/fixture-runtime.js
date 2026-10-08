@@ -6,7 +6,7 @@ const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
 window.chrome = {
   runtime: {
-    getManifest: () => ({ version: '1.1.0' }),
+    getManifest: () => ({ version: '1.1.1' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
       if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
