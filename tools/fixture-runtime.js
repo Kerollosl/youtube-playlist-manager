@@ -6,9 +6,10 @@ const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
 window.chrome = {
   runtime: {
+    getManifest: () => ({ version: '1.0.1' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
-      if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: 'WL', title: 'Watch later', fingerprint: 'demo', items: structuredClone(fixtureItems) };
+      if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
       if (message.type === 'STATUS') return { ok: true, ...structuredClone(fixtureStorage), busy: false };
       if (message.type === 'QUEUE' || message.type === 'QUEUE_LINKS') {
         fixtureStorage.queue = { id: crypto.randomUUID(), kind: message.kind, sourceId: 'WL', items: message.items || fixtureItems.filter(item => message.keys.includes(item.setVideoId)), savedAt: Date.now() };

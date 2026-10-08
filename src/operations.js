@@ -6,7 +6,11 @@ export const counts = items => items.reduce((out, item) => {
 }, Object.create(null));
 
 export function assertComplete(snapshot) {
-  if (snapshot?.complete !== true) throw new Error('YouTube did not return a complete playlist. Changes are disabled.');
+  if (snapshot?.complete !== true) {
+    const name = snapshot?.title || snapshot?.playlistId || 'this playlist';
+    const reason = snapshot?.warnings?.[0] || 'YouTube did not return a complete playlist.';
+    throw new Error(`Could not fully read ${name}. ${reason} No further changes were made. Check playlist reader details for more information.`);
+  }
   if (!snapshot.fingerprint) throw new Error('Cannot identify the YouTube account.');
   const ids = snapshot.items.map(item => item.setVideoId);
   if (ids.some(id => !id) || new Set(ids).size !== ids.length) throw new Error('Missing or ambiguous playlist occurrence IDs. Changes are disabled.');

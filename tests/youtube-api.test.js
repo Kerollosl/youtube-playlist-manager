@@ -20,6 +20,18 @@ const initial = contents => ({ contents: { twoColumnBrowseResultsRenderer: {
     playlistId: 'PLtest', targetId: 'playlist-video-list', isEditable: true, canReorder: true, contents
   } } } }]
 } }, metadata: { playlistMetadataRenderer: { title: 'Test playlist' } } });
+const emptyPlaylist = () => ({
+  header: { pageHeaderRenderer: { content: { pageHeaderViewModel: {} } } },
+  microformat: { microformatDataRenderer: { urlCanonical: 'https://www.youtube.com/playlist?list=PLtest' } },
+  contents: { twoColumnBrowseResultsRenderer: { tabs: [{ tabRenderer: {
+    selected: true, content: { sectionListRenderer: { contents: [{ itemSectionRenderer: {
+      contents: [{ messageRenderer: { text: { simpleText: 'No videos in this playlist yet' } } }]
+    } }] } }
+  } }] } }
+});
+const picker = (playlistId = 'PLtest') => ({ contents: [{ addToPlaylistRenderer: {
+  playlists: [{ playlistAddToOptionRenderer: { playlistId, title: { simpleText: 'Test' } } }]
+} }] });
 
 function page(responses, configOverrides = {}) {
   const calls = [];
@@ -180,4 +192,100 @@ test('authentication cookie change stops pagination without exposing cookie valu
   assert.match(result.warnings[0], /account changed/);
   assert.equal(calls.length, 1);
   assert.ok(!JSON.stringify(result).includes('secret-cookie'));
+});
+
+test('modern empty playlist proves enumeration and verifies editability with account-bound picker', async () => {
+  const { run, calls } = page([emptyPlaylist(), picker()]);
+  const result = await run({ type: 'read', playlistId: 'PLtest' });
+  assert.equal(result.complete, true);
+  assert.equal(result.editable, true);
+  assert.equal(result.items.length, 0);
+  assert.equal(result.pages, 1);
+  assert.equal(result.diagnostics.identity.canonical, true);
+  assert.deepEqual(Array.from(result.diagnostics.bodyRowRenderers), ['messageRenderer']);
+  assert.equal(calls.length, 2);
+  assert.ok(calls[1].url.includes('/playlist/get_add_to_playlist'));
+  assert.ok(!JSON.stringify(result.diagnostics).includes('PLtest'));
+  assert.ok(!JSON.stringify(result.diagnostics).includes('secret-cookie'));
+});
+
+test('authoritative header identity and editability support empty playlists without a picker', async () => {
+  const data = emptyPlaylist();
+  delete data.microformat;
+  data.header = { playlistHeaderRenderer: { playlistId: 'PLtest', isEditable: true,
+    numVideosText: { simpleText: 'No videos' } } };
+  const { run, calls } = page([data]);
+  const result = await run({ type: 'read', playlistId: 'PLtest' });
+  assert.equal(result.complete, true);
+  assert.equal(result.editable, true);
+  assert.equal(calls.length, 1);
+});
+
+test('empty playlist header edit endpoint must target exact playlist', async () => {
+  const data = emptyPlaylist();
+  data.header.pageHeaderRenderer.content.pageHeaderViewModel.actions = {
+    playlistEditEndpoint: { playlistId: 'PLtest', actions: [{ action: 'ACTION_SET_PLAYLIST_NAME' }] }
+  };
+  const { run, calls } = page([data]);
+  const result = await run({ type: 'read', playlistId: 'PLtest' });
+  assert.equal(result.editable, true);
+  assert.equal(calls.length, 1);
+});
+
+test('missing list ID can use matching canonical identity but rejects disagreement', async () => {
+  const data = initial([row('one')]);
+  delete data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.playlistVideoListRenderer.playlistId;
+  data.microformat = emptyPlaylist().microformat;
+  const good = page([data]);
+  assert.equal((await good.run({ type: 'read', playlistId: 'PLtest' })).complete, true);
+  data.header = { playlistHeaderRenderer: { playlistId: 'PLdifferent' } };
+  await assert.rejects(page([data]).run({ type: 'read', playlistId: 'PLtest' }), /different playlist/);
+});
+
+test('empty-looking unsupported or ambiguous bodies remain incomplete', async () => {
+  const modifications = [
+    data => { delete data.microformat; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0]
+      .itemSectionRenderer.contents[0].messageRenderer.text.simpleText = 'Playlist unavailable'; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0]
+      .itemSectionRenderer.contents.push({ lockupViewModel: {} }); },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0]
+      .itemSectionRenderer.contents.push(continuation('next')); },
+    data => { data.header.playlistHeaderRenderer = { playlistId: 'PLtest', numVideosText: { simpleText: '2 videos' } }; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.richGridRenderer = {}; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.unknownBody = {}; },
+    data => { data.contents.twoColumnBrowseResultsRenderer.tabs[0].tabRenderer.content.sectionListRenderer.contents[0]
+      .itemSectionRenderer.unknownBody = {}; },
+    data => { data.header.pageHeaderRenderer.content.pageHeaderViewModel.metadata = {
+      contentMetadataViewModel: { metadataRows: [{ metadataParts: [{ text: { content: '2 videos' } }] }] }
+    }; }
+  ];
+  for (const modify of modifications) {
+    const data = emptyPlaylist();
+    modify(data);
+    const { run, calls } = page([data]);
+    const result = await run({ type: 'read', playlistId: 'PLtest' });
+    assert.equal(result.complete, false);
+    assert.equal(calls.length, 1);
+  }
+});
+
+test('empty read does not infer editability from absent or unavailable picker target', async () => {
+  for (const response of [picker('PLother'), new Error('network')]) {
+    const { run } = page([emptyPlaylist(), response]);
+    const result = await run({ type: 'read', playlistId: 'PLtest' });
+    assert.equal(result.complete, true);
+    assert.equal(result.editable, false);
+  }
+});
+
+test('empty read rejects conflicting canonical identity and account change during picker', async () => {
+  const data = emptyPlaylist();
+  data.microformat.microformatDataRenderer.urlCanonical = 'https://www.youtube.com/playlist?list=PLwrong';
+  await assert.rejects(page([data]).run({ type: 'read', playlistId: 'PLtest' }), /different playlist/);
+  const changed = page([emptyPlaylist(), (_call, config) => {
+    config.DATASYNC_ID = 'another-account';
+    return { ok: true, status: 200, json: async () => picker() };
+  }]);
+  await assert.rejects(changed.run({ type: 'read', playlistId: 'PLtest' }), /account changed/);
 });

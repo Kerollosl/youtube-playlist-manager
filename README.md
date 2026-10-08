@@ -48,6 +48,8 @@ Backups preserve video links and the original playlist contents. Restoring video
 
 YouTube's web playlist interfaces are undocumented and can change. Watch Later is unavailable through the supported YouTube Data API. This extension deliberately disables changes if it cannot identify exact playlist occurrences or complete a scan. Link copying works from loaded rows even when playlist editing is unavailable.
 
+If a playlist cannot be read, open **More actions → Playlist reader details** and choose the source or destination. This read-only check shows completeness, video count, and a small structural report without cookies, authorization headers, or raw video data. After updating the source files, reload the custom extension in `chrome://extensions` and refresh YouTube.
+
 ## Privacy
 
 The extension runs only on `https://www.youtube.com/`. It stores selections and backups locally and sends playlist operations directly to YouTube. It does not request cookie access through Chrome, send telemetry, or upload anything to NotebookLM automatically. Authorization stays inside the YouTube page.

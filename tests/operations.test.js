@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { linksText, copyItems, removeItems, assertCopied } from '../src/operations.js';
+import { linksText, copyItems, removeItems, assertCopied, assertComplete } from '../src/operations.js';
 const a = { setVideoId: 'a', videoId: 'abcdefghijk', title: 'One' };
 const b = { setVideoId: 'b', videoId: 'lmnopqrstuv', title: 'Two' };
 const source = { playlistId: 'WL', fingerprint: 'account', complete: true, items: [a, b] };
@@ -68,4 +68,8 @@ test('storage failure happens before any network mutation', async () => {
   const io = memoryIO({ failSave: true });
   await assert.rejects(copyItems(job(), io), /storage quota/);
   assert.equal(io.calls.length, 0);
+});
+test('incomplete playlist errors identify the failed list and reader reason', () => {
+  assert.throws(() => assertComplete({ title: 'Empty destination', complete: false,
+    warnings: ['Unsupported empty playlist format.'] }), /Empty destination.*Unsupported empty playlist format/);
 });

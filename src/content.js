@@ -155,7 +155,7 @@
     add('Move to playlist…', () => transferDialog('move'), !exactSelection() || !snapshot?.editable);
     add('Remove from this list…', removeDialog, !exactSelection() || !snapshot?.editable);
     add('Sort playlist…', sortDialog, !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder);
-    menu.append(element('hr')); add('Saved selections & recovery…', recoveryDialog); add('Refresh playlist details', async () => { snapshot = null; await readPlaylist(); }, !playlistId());
+    menu.append(element('hr')); add('Saved selections & recovery…', recoveryDialog); add('Playlist reader details…', readerDialog, !playlistId()); add('Refresh playlist details', async () => { snapshot = null; await readPlaylist(); }, !playlistId());
   }
   async function copyLinks(items = [...selected.values()]) {
     const text = links(items); if (!text) return;
@@ -164,6 +164,37 @@
   }
   function download(name, content, type = 'application/json') { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = element('a'); anchor.href = url; anchor.download = name; root.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
   function exportPlaylist() { if (!snapshot?.complete) throw new Error('Wait for the full playlist to load.'); download(`playlist-${snapshot.playlistId}.json`, JSON.stringify(snapshot, null, 2)); announce('Playlist backup saved.'); }
+  async function readerDialog() {
+    const body = dialog('Playlist reader details');
+    body.append(element('p', 'Checks playlist contents without changing any videos.'));
+    const label = element('label', 'Playlist'); label.htmlFor = 'yt-reader-playlist';
+    const select = element('select'); select.id = label.htmlFor;
+    const current = element('option', snapshot?.title || 'Current playlist'); current.value = playlistId(); select.append(current);
+    const output = element('div'); body.append(label, select, output);
+    const check = async () => {
+      const id = select.value; if (!id) return;
+      select.disabled = true;
+      output.replaceChildren(element('p', 'Reading playlist…'));
+      try {
+        const result = await send('READ', { playlistId: id }); if (!body.isConnected) return;
+        output.replaceChildren(element('p', `${result.title}: ${result.complete ? `Complete · ${result.items.length} videos` : 'Incomplete'}. ${result.editable ? 'Editable.' : 'Editing unavailable.'}`));
+        for (const warning of result.warnings || []) output.append(element('p', warning, 'error'));
+        const details = element('textarea'); details.readOnly = true; details.setAttribute('aria-label', 'Reader diagnostics');
+        details.value = JSON.stringify({ version: chrome.runtime.getManifest().version, complete: result.complete, editable: result.editable, items: result.items.length, pages: result.pages, warnings: result.warnings, structure: result.diagnostics }, null, 2); output.append(details);
+      } catch (error) { output.replaceChildren(element('p', error.message, 'error')); }
+      finally { select.disabled = false; }
+    };
+    select.addEventListener('change', check);
+    const foot = footer(body); foot.prepend(button('Check again', check));
+    await check();
+    try {
+      const picker = await send('PLAYLISTS'); if (!body.isConnected) return;
+      for (const item of picker.playlists || []) {
+        const id = item.id || item.playlistId; if (id === current.value) continue;
+        const option = element('option', item.title); option.value = id; select.append(option);
+      }
+    } catch { /* Current playlist remains available if the picker is unavailable. */ }
+  }
   function selectDuplicates() { const seen = new Set(); const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); selected.clear(); for (const item of items) { if (seen.has(item.videoId)) selected.set(item.key, item); seen.add(item.videoId); } syncRows(); }
   function closeDialog() { if (backdrop.hidden) return; backdrop.hidden = true; backdrop.replaceChildren(); dialogFocus?.focus?.(); }
   function dialog(title) {

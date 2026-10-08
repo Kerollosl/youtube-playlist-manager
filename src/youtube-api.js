@@ -188,22 +188,109 @@ export async function youtubeCommand(command) {
 
   const data = await request('browse', { browseId: `VL${command.playlistId}` });
   const lists = containers(data.contents, 'playlistVideoListRenderer');
+  const header = data.header?.playlistHeaderRenderer;
+  const tabs = data.contents?.twoColumnBrowseResultsRenderer?.tabs;
+  const tabRenderers = Array.isArray(tabs) ? tabs.map(tab => tab.tabRenderer).filter(Boolean) : [];
+  const selectedTabs = tabRenderers.filter(tab => tab.selected === true);
+  const selectedTab = selectedTabs.length === 1 ? selectedTabs[0]
+    : !selectedTabs.length && tabRenderers.length === 1 ? tabRenderers[0] : null;
+  const selectedBody = selectedTab?.content;
+  const sections = selectedBody?.sectionListRenderer?.contents;
+  const bodyRows = Array.isArray(sections) ? sections.flatMap(section =>
+    Array.isArray(section.itemSectionRenderer?.contents) ? section.itemSectionRenderer.contents : [section]) : [];
+  let canonicalId = null;
+  const canonical = data.microformat?.microformatDataRenderer?.urlCanonical;
+  if (typeof canonical === 'string') {
+    try {
+      const url = new URL(canonical, origin);
+      if (url.protocol === 'https:' && ['youtube.com', 'www.youtube.com'].includes(url.hostname)
+        && url.pathname === '/playlist') canonicalId = url.searchParams.get('list');
+    } catch { /* An unrecognized URL cannot establish identity. */ }
+  }
+  const identityIds = [...lists.map(list => list.playlistId), header?.playlistId, canonicalId].filter(Boolean);
+  if (identityIds.some(playlistId => playlistId !== command.playlistId)) {
+    throw new Error('YouTube returned a different playlist. Refresh the page.');
+  }
   const warnings = [];
   const result = { ok: true, playlistId: command.playlistId, fingerprint, items: [],
-    title: data.metadata?.playlistMetadataRenderer?.title || command.playlistId,
-    complete: false, editable: false, canReorder: false, warnings };
+    title: data.metadata?.playlistMetadataRenderer?.title || text(header?.title) || command.playlistId,
+    complete: false, editable: false, canReorder: false, warnings,
+    diagnostics: {
+      listCount: lists.length,
+      listKeys: lists.map(list => Object.keys(list || {})),
+      headerRenderers: Object.keys(data.header || {}),
+      microformatRenderers: Object.keys(data.microformat || {}),
+      selectedBodyRenderers: Object.keys(selectedBody || {}),
+      bodyRowRenderers: [...new Set(bodyRows.flatMap(row => Object.keys(row || {}).filter(key => key.endsWith('Renderer'))))],
+      identity: { list: lists.some(list => list.playlistId === command.playlistId),
+        header: header?.playlistId === command.playlistId, canonical: canonicalId === command.playlistId }
+    } };
+  if (!identityIds.length) {
+    warnings.push('YouTube did not identify the requested playlist.');
+    return result;
+  }
+  if (!lists.length) {
+    // Empty playlists have a terminal message instead of a video list. Accept
+    // only the observed exact marker in the selected tab's ordinary body.
+    const emptyMessage = 'No videos in this playlist yet';
+    const knownSections = Array.isArray(sections) && sections.length > 0
+      && sections.every(section => section.itemSectionRenderer
+        && Array.isArray(section.itemSectionRenderer.contents)
+        && section.itemSectionRenderer.contents.length > 0
+        && Object.keys(section).every(key => ['itemSectionRenderer', 'trackingParams'].includes(key))
+        && Object.keys(section.itemSectionRenderer).every(key =>
+          ['contents', 'trackingParams', 'sectionIdentifier', 'targetId', 'continuations'].includes(key)));
+    const terminalEmpty = knownSections && bodyRows.length === 1 && bodyRows[0].messageRenderer
+      && Object.keys(selectedBody).every(key => ['sectionListRenderer', 'trackingParams'].includes(key))
+      && Object.keys(selectedBody.sectionListRenderer).every(key =>
+        ['contents', 'trackingParams', 'targetId', 'continuations'].includes(key))
+      && Object.keys(bodyRows[0]).every(key => ['messageRenderer', 'trackingParams'].includes(key))
+      && text(bodyRows[0].messageRenderer.text).trim() === emptyMessage
+      && !containers(selectedBody, 'continuationItemRenderer').length
+      && sections.every(section => section.itemSectionRenderer.continuations === undefined
+        || Array.isArray(section.itemSectionRenderer.continuations) && !section.itemSectionRenderer.continuations.length)
+      && (selectedBody.sectionListRenderer.continuations === undefined
+        || Array.isArray(selectedBody.sectionListRenderer.continuations) && !selectedBody.sectionListRenderer.continuations.length);
+    const countText = text(header?.numVideosText).trim();
+    const pageMetadata = data.header?.pageHeaderRenderer?.content?.pageHeaderViewModel
+      ?.metadata?.contentMetadataViewModel?.metadataRows;
+    const videoStats = [...(Array.isArray(header?.stats) ? header.stats.map(text) : []),
+      ...(Array.isArray(pageMetadata) ? pageMetadata.flatMap(row =>
+        Array.isArray(row.metadataParts) ? row.metadataParts.map(part => part.text?.content || '') : []) : [])]
+      .filter(value => typeof value === 'string' && /^\s*[\d,.]+\s+videos?\s*$/i.test(value));
+    const positiveCount = /\d/.test(countText) && Number(countText.replace(/[^\d]/g, '')) > 0
+      || videoStats.some(value => Number(value.replace(/[^\d]/g, '')) > 0);
+    if (!terminalEmpty || positiveCount) {
+      warnings.push('YouTube playlist structure is unrecognized. No complete snapshot is available.');
+      return result;
+    }
+    result.complete = true;
+    result.pages = 1;
+    result.editable = header?.isEditable === true
+      || containers(data.header, 'playlistEditEndpoint').some(endpoint => endpoint.playlistId === command.playlistId);
+    if (!result.editable) {
+      try {
+        const picker = await request('playlist/get_add_to_playlist', { videoIds: [] });
+        const menus = containers(picker.contents, 'addToPlaylistRenderer');
+        result.editable = menus.length === 1 && Array.isArray(menus[0]?.playlists)
+          && menus[0].playlists.some(row => row.playlistAddToOptionRenderer?.playlistId === command.playlistId);
+      } catch (error) {
+        warnings.push('Could not verify whether this empty playlist is editable.');
+        // A changed session invalidates the entire read, including empty reads.
+        try { assertSession(); } catch {
+          result.complete = false;
+          warnings.push('YouTube account changed. Review the operation again.');
+        }
+      }
+    }
+    assertSession();
+    return result;
+  }
   if (lists.length !== 1 || !Array.isArray(lists[0]?.contents)) {
     warnings.push('YouTube playlist structure is unrecognized. No complete snapshot is available.');
     return result;
   }
   const list = lists[0];
-  if (list.playlistId && list.playlistId !== command.playlistId) {
-    throw new Error('YouTube returned a different playlist. Refresh the page.');
-  }
-  if (!list.playlistId) {
-    warnings.push('YouTube did not identify the requested playlist.');
-    return result;
-  }
   result.editable = list.isEditable === true;
   result.canReorder = list.canReorder === true;
   const seenOccurrences = new Set();
@@ -289,5 +376,6 @@ export async function youtubeCommand(command) {
   }
   result.complete = recognized && !token;
   result.pages = pages;
+  if (result.complete) assertSession();
   return result;
 }
