@@ -12,6 +12,7 @@ function memoryIO(options = {}) {
   const checkpoints = [];
   let count = 0;
   return { states, calls, checkpoints,
+    wait: async () => {},
     read: async id => structuredClone(states[id]),
     save: async job => { if (options.failSave) throw new Error('storage quota'); checkpoints.push(structuredClone(job)); },
     edit: async (id, action) => {
@@ -72,4 +73,72 @@ test('storage failure happens before any network mutation', async () => {
 test('incomplete playlist errors identify the failed list and reader reason', () => {
   assert.throws(() => assertComplete({ title: 'Empty destination', complete: false,
     warnings: ['Unsupported empty playlist format.'] }), /Empty destination.*Unsupported empty playlist format/);
+});
+
+test('delayed copy visibility is verified with read-only retries and one add', async () => {
+  const io = memoryIO(), op = job(); op.items = [a];
+  const realRead = io.read, waits = [], edit = io.edit;
+  let staleReads = 0;
+  io.edit = async (...args) => { await edit(...args); staleReads = 3; };
+  io.read = async id => {
+    if (id === 'PLdest' && staleReads > 0) { staleReads--; return structuredClone(target); }
+    return realRead(id);
+  };
+  io.wait = async ms => waits.push(ms);
+  await copyItems(op, io);
+  assert.deepEqual(waits, [250, 500, 1000]);
+  assert.equal(op.verification.attempts, 4);
+  assert.equal(io.calls.length, 1);
+  assert.deepEqual(op.copied, ['a']);
+  assert.equal(io.states.WL.items.length, 2);
+});
+test('a delayed copy with a lost acknowledgement is not added twice', async () => {
+  const io = memoryIO({ lostReply: true }), op = job(); op.items = [a];
+  const realRead = io.read, edit = io.edit;
+  let staleReads = 0;
+  io.edit = async (...args) => { try { await edit(...args); } finally { staleReads = 2; } };
+  io.read = async id => id === 'PLdest' && staleReads-- > 0 ? structuredClone(target) : realRead(id);
+  await copyItems(op, io);
+  assert.equal(io.calls.length, 1);
+  assert.deepEqual(op.copied, ['a']);
+});
+test('unchanged copy results stop after bounded reads and retain the intent and originals', async () => {
+  const io = memoryIO(), op = job(); op.items = [a];
+  io.edit = async (id, action) => io.calls.push({ id, action });
+  const waits = []; io.wait = async ms => waits.push(ms);
+  await assert.rejects(copyItems(op, io), /5 checks.*expected 1 copies, found 0/);
+  assert.equal(io.calls.length, 1);
+  assert.deepEqual(waits, [250, 500, 1000, 2000]);
+  assert.equal(op.intent.kind, 'add');
+  assert.equal(op.copied.length, 0);
+  assert.equal(io.states.WL.items.length, 2);
+});
+test('a conflicting copy count or account change does not get masked by retries', async () => {
+  for (const variant of ['duplicate', 'account']) {
+    const io = memoryIO(), op = job(); op.items = [a];
+    const edit = io.edit; let waits = 0;
+    io.wait = async () => waits++;
+    io.edit = async (...args) => {
+      await edit(...args);
+      if (variant === 'duplicate') io.states.PLdest.items.push({ ...a, setVideoId: 'unexpected' });
+      else io.states.PLdest.fingerprint = 'other-account';
+    };
+    await assert.rejects(copyItems(op, io), variant === 'duplicate' ? /expected 1 copies, found 2/ : /account changed/);
+    assert.equal(waits, 0);
+    assert.equal(io.calls.length, 1);
+    assert.equal(io.states.WL.items.length, 2);
+  }
+});
+
+test('a stale final browse is rechecked without repeating a verified add', async () => {
+  const io = memoryIO(), op = job(); op.items = [a];
+  const read = io.read; let targetReads = 0;
+  io.read = async id => {
+    if (id === 'PLdest' && ++targetReads === 3) return structuredClone(target);
+    return read(id);
+  };
+  await copyItems(op, io);
+  assert.equal(op.finalVerification.attempts, 2);
+  assert.equal(io.calls.length, 1);
+  assert.equal(io.states.WL.items.length, 2);
 });

@@ -53,10 +53,10 @@
     toast.hidden = !text; clearTimeout(toastTimer);
     if (!persistent) toastTimer = setTimeout(() => { toast.hidden = true; }, 6500);
   }
-  function messageDialog(title, text) { const body = dialog(title); body.append(element('p', text, 'error-copy')); if (playlistId()) body.append(button('Check playlist reader', readerDialog)); footer(body); }
+  function messageDialog(title, text) { const body = dialog(title); body.append(element('p', text, 'error-copy')); if (/saved operation before starting another/i.test(text)) body.append(button('Review saved operation', recoveryDialog)); else if (playlistId()) body.append(button('Check playlist reader', readerDialog)); footer(body); }
   function announce(text) { const full = String(text || ''); notice(full.length > 140 ? `${full.slice(0, 110).trim()}…` : full, full.length > 140 ? 'Details' : null, () => messageDialog('Operation details', full)); }
   function refreshNotice(text) { notice(text, 'Refresh', () => location.reload(), true); }
-  function report(error) { if (error?.refreshPage) { refreshNotice(error.message); return; } const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
+  function report(error) { if (/saved operation before starting another/i.test(error?.message || '')) { notice('A stopped operation needs review.', 'Review', recoveryDialog, true); return; } if (error?.refreshPage) { refreshNotice(error.message); return; } const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
   async function send(type, values = {}) {
     const disconnected = () => Object.assign(new Error('Extension updated. Refresh YouTube to reconnect.'), { refreshPage: true });
     if (typeof chrome === 'undefined' || typeof chrome.runtime?.sendMessage !== 'function') throw disconnected();
@@ -302,13 +302,26 @@
     const render = (job, current = false) => {
       const card = element('div', '', 'saved'), items = job.items || [], actions = element('div', '', 'saved-actions');
       card.append(element('strong', `${job.kind === 'move' ? 'Move' : job.kind === 'remove' ? 'Removal' : job.kind === 'sort' ? 'Sort' : 'Copy'} · ${items.length} videos`));
+      card.append(element('small', `Started ${new Date(job.createdAt || job.savedAt || Date.now()).toLocaleString()}`));
+      if (job.targetId) card.append(element('small', `Destination: ${job.targetBefore?.title || job.targetId}`));
       card.append(element('small', current ? job.phase === 'ready_to_remove' ? 'Copies verified. Originals kept.' : status.busy ? 'A step is running.' : 'Stopped before completion. Review the saved videos.' : `Saved ${new Date(job.createdAt || job.savedAt || Date.now()).toLocaleString()}`));
       if (job.error) card.append(element('p', job.error, 'error note'));
       actions.append(button('Copy links', () => copyLinks(items)), button('Save links', () => download('saved-video-links.txt', links(items), 'text/plain')));
       if (job.sourceBefore) actions.append(button('Download backup', () => download(`playlist-${job.sourceId || job.sourceBefore.playlistId}.json`, JSON.stringify(job.sourceBefore, null, 2))));
       if (current && job.phase === 'ready_to_remove') actions.append(button('Review removal', () => moveReview(job)));
-      if (current) { const stop = button('Keep remaining originals', async () => { await send('DISMISS'); await recoveryDialog(); }); stop.disabled = status.busy; actions.append(stop); }
-      card.append(actions); body.append(card);
+      if (current) { const stop = button('Keep originals and close operation', async () => { await send('DISMISS'); await recoveryDialog(); }); stop.disabled = status.busy; actions.append(stop); }
+      card.append(actions);
+      if (current) {
+        const details = element('details', '', 'diagnostics'), output = element('textarea');
+        output.readOnly = true; output.setAttribute('aria-label', 'Operation diagnostics');
+        output.value = JSON.stringify({ version: chrome.runtime.getManifest().version, kind: job.kind, phase: job.phase,
+          startedAt: job.createdAt, selectedVideos: items.length, verifiedCopies: job.copied?.length || 0,
+          removedOriginals: job.removed?.length || 0, error: job.error,
+          pendingAdd: job.intent?.kind === 'add' ? { videoId: job.intent.videoId, beforeCount: job.intent.beforeCount } : null,
+          lastCopyCheck: job.verification, finalCopyCheck: job.finalVerification }, null, 2);
+        details.append(element('summary', 'Technical details'), output); card.append(details);
+      }
+      body.append(card);
     };
     if (status.activeJob) render(status.activeJob, true);
     if (status.queue) render(status.queue);

@@ -39,7 +39,7 @@ https://www.youtube.com/watch?v=lmnopqrstuv
 3. The extension adds copies and checks YouTube's returned playlist contents.
 4. Only after the copies are verified does it offer to remove the exact original playlist entries. Review that list and confirm.
 
-If a copy fails, an account changes, storage fails, or YouTube returns incomplete data, the operation stops. Pending operations never replay automatically. The recovery dialog provides the saved links and downloadable snapshots. A partial copy can leave some extra videos in the destination; it must not trigger source deletion.
+After each add, the extension rechecks unchanged YouTube results up to five times without repeating the add request. If a copy still cannot be verified, an account changes, storage fails, or YouTube returns incomplete data, the operation stops. Pending operations never replay automatically. The recovery dialog provides the saved links, downloadable snapshots, operation time, and verification details. **Keep originals and close operation** archives a stopped job so a new operation can start; it does not remove playlist videos. A partial copy can leave some extra videos in the destination; it must not trigger source deletion.
 
 ## Recovery and limits
 

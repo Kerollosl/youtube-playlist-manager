@@ -55,17 +55,43 @@ export async function copyItems(job, io) {
     let mutationError;
     try { await io.edit(job.targetId, { action: 'ACTION_ADD_VIDEO', addedVideoId: item.videoId }); }
     catch (error) { mutationError = error; }
-    const after = await io.read(job.targetId);
-    assertAccount(after, job.fingerprint);
-    const afterCount = counts(after.items)[item.videoId] || 0;
+    // YouTube can acknowledge a write before the browse result reflects it.
+    // Recheck reads only: replaying an add after an unknown result can duplicate it.
+    let afterCount;
+    const delays = [0, 250, 500, 1000, 2000];
+    for (const [attempt, delay] of delays.entries()) {
+      if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
+      const after = await io.read(job.targetId);
+      assertAccount(after, job.fingerprint);
+      if (after.playlistId !== job.targetId) throw new Error('The destination changed.');
+      afterCount = counts(after.items)[item.videoId] || 0;
+      job.verification = { attempts: attempt + 1, beforeCount, expectedCount: beforeCount + 1,
+        observedCount: afterCount, checkedAt: Date.now() };
+      await io.save(job);
+      if (afterCount !== beforeCount) break; // Success or a conflicting count: never mask ambiguity.
+    }
     if (afterCount !== beforeCount + 1) {
-      throw new Error(mutationError?.message || 'Copy could not be verified. Stopped; no source videos were removed.');
+      throw new Error(mutationError?.message || `Copy could not be verified after ${job.verification.attempts} checks (expected ${beforeCount + 1} copies, found ${afterCount}). Stopped; no source videos were removed.`);
     }
     job.copied.push(item.setVideoId);
     job.intent = null;
     await io.save(job);
   }
-  assertCopied(job, await io.read(job.targetId));
+  // A subsequent browse can also lag after the final item check. Recheck only
+  // missing copies; account, identity and incomplete-read errors still stop at once.
+  const baseline = counts(job.targetBefore.items), expected = counts(job.items);
+  for (const [attempt, delay] of [0, 250, 500, 1000, 2000].entries()) {
+    if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
+    const destination = await io.read(job.targetId);
+    assertAccount(destination, job.fingerprint);
+    if (destination.playlistId !== job.targetId) throw new Error('The destination changed.');
+    const actual = counts(destination.items);
+    const missingCopies = Object.entries(expected).filter(([id, count]) => (actual[id] || 0) < (baseline[id] || 0) + count)
+      .map(([videoId, count]) => ({ videoId, expectedCount: (baseline[videoId] || 0) + count, observedCount: actual[videoId] || 0 }));
+    job.finalVerification = { attempts: attempt + 1, missingCopies, checkedAt: Date.now() };
+    await io.save(job);
+    if (!missingCopies.length || attempt === 4) { assertCopied(job, destination); return; }
+  }
 }
 
 export async function removeItems(job, io) {
