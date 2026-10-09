@@ -11,7 +11,8 @@
     *{box-sizing:border-box}[hidden]{display:none!important}::selection{background:var(--selection)}button,input,select,textarea{font:inherit;caret-color:var(--blue)}button{min-height:44px;border:0;background:transparent;color:inherit;cursor:pointer;transition:background-color 160ms,color 160ms}button:disabled{opacity:.45;cursor:default}button:hover:not(:disabled){background:var(--hover)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}button svg{width:20px;height:20px;fill:currentColor;flex-shrink:0}.icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:50%;flex-shrink:0}.text{border-radius:22px;padding:10px 16px;font-weight:500}.primary{background:var(--blue);color:var(--primary-text)}.primary:hover:not(:disabled){filter:brightness(.92);background:var(--blue)}.danger{color:var(--danger)}
     .bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:var(--toolbar-z);display:flex;align-items:center;gap:4px;height:56px;background:var(--surface);border-radius:16px;padding:6px;box-shadow:0 4px 20px #0004;max-width:calc(100vw - 24px);white-space:nowrap}.count{padding:0 12px;font-weight:500;min-width:116px;font-variant-numeric:tabular-nums}.count small{color:var(--muted);font-size:inherit;font-weight:400}.divider{width:1px;height:24px;background:var(--line);margin:0 4px}.copy,.save{display:flex;align-items:center;justify-content:center;gap:8px}.save{color:var(--blue)}.menu{position:absolute;bottom:calc(100% + 10px);right:0;width:280px;max-width:calc(100vw - 24px);max-height:min(70vh,540px);overflow:auto;background:var(--surface);border-radius:12px;padding:8px 0;box-shadow:0 4px 24px #0005}.menu button{display:flex;align-items:center;width:100%;text-align:left;padding:10px 20px;border-radius:0;font-weight:400}.menu-label{display:block;padding:10px 20px 4px;font-size:12px;color:var(--muted);font-weight:500}.menu hr{border:0;border-top:1px solid var(--line);margin:8px 0}.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:var(--notice-z);border-radius:12px;background:var(--surface);box-shadow:0 3px 16px #0004;padding:8px 12px 8px 16px;max-width:min(420px,calc(100vw - 24px));display:flex;gap:8px;align-items:center;white-space:normal}.toast-message{flex:1;min-width:0;line-height:1.45}.toast button{color:var(--blue);flex-shrink:0;padding:8px 12px}
     .backdrop{position:fixed;inset:0;z-index:var(--dialog-z);background:#0009;display:flex;align-items:center;justify-content:center;padding:20px}.dialog{background:var(--surface);border-radius:16px;width:480px;max-width:100%;max-height:85vh;overflow:auto;box-shadow:0 8px 32px #0005;padding:0 24px 20px;overflow-wrap:anywhere}.dialog-header{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 0;margin-bottom:4px;position:sticky;top:0;background:var(--surface);z-index:1}.dialog h2{font-size:20px;line-height:1.3;margin:0;font-weight:500}.dialog p{line-height:1.5;margin:12px 0;color:var(--muted)}.dialog label{display:block;margin:18px 0 6px;font-weight:500}.dialog input:not([type=checkbox]),.dialog select,.dialog textarea{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:transparent;color:inherit}.dialog input::placeholder{color:var(--muted)}.dialog select option{background:var(--surface);color:var(--text)}.dialog textarea{min-height:160px;resize:vertical;line-height:1.5}.footer{display:flex;gap:8px;justify-content:flex-end;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap}.videos{max-height:168px;overflow:auto;margin:16px 0 0;padding:0;list-style:none;font-size:14px;border-top:1px solid var(--line)}.videos li{padding:9px 0;border-bottom:1px solid var(--line);line-height:1.4}.saved{padding:16px 0;border-bottom:1px solid var(--line)}.saved strong{font-weight:500}.saved small{display:block;color:var(--muted);margin:5px 0}.saved-actions{display:flex;gap:4px;flex-wrap:wrap}.error{color:var(--danger)!important}.note{font-size:13px}.checklabel{display:flex!important;gap:8px;align-items:center;min-height:44px}.checklabel input{accent-color:var(--blue);width:20px;height:20px}.diagnostics{margin-top:16px}.diagnostics summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--blue);font-weight:500}.diagnostics textarea{font:12px/1.5 monospace;max-height:240px}.error-copy{white-space:pre-wrap}
-    :host([data-menu-open]) .toast{visibility:hidden}
+    .panel{position:absolute;bottom:calc(100% + 10px);right:0;width:320px;max-width:calc(100vw - 24px);max-height:65vh;overflow:auto;background:var(--surface);border-radius:12px;padding:12px;box-shadow:0 4px 24px #0005;white-space:normal}.panel h2{font-size:16px;margin:0;font-weight:500}.panel .dialog-header{padding:0;margin:0}.panel p{color:var(--muted);margin:8px 4px}.panel input{width:100%;min-height:44px;padding:10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}.panel .choices{max-height:230px;overflow:auto;margin-top:8px}.panel .choices button{display:block;text-align:left;width:100%;border-radius:8px;padding:10px 12px}.panel .footer{margin-top:12px;padding-top:8px}.panel summary{cursor:pointer;padding:10px 4px;color:var(--muted)}
+    :host([data-menu-open]) .toast,:host([data-panel-open]) .toast{visibility:hidden}
     @media(max-width:560px){.bar{bottom:12px;gap:0;max-width:calc(100vw - 16px);padding:6px 4px}.count{min-width:0;padding:0 8px;font-size:13px}.count small{display:none}.divider{margin:0 2px}.copy{width:44px;height:44px;padding:0;gap:0}.copy span{display:none}.dialog{padding:0 20px 16px}.backdrop{padding:12px}.toast{bottom:78px;font-size:14px}.dialog-header{padding:10px 0}.footer{gap:4px}.menu{right:0}}
     @media(max-width:340px){.bar .copy{display:none}.count{padding:0 6px;font-size:12px}}
     @media(prefers-reduced-motion:reduce){button{transition:none}}
@@ -24,6 +25,7 @@
     <button class="icon" data-action="menu" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">${svg('more')}</button>
     <button class="icon" data-action="close" title="Close selection" aria-label="Close selection">${svg('close')}</button>
     <div class="menu" role="menu" aria-label="Selection actions" hidden></div>
+    <div class="panel" hidden></div>
   </div><div class="toast" role="status" hidden></div><div class="backdrop" hidden></div>`;
   document.documentElement.append(host);
   function syncTheme() { host.dataset.theme = document.documentElement.hasAttribute('dark') ? 'dark' : 'light'; }
@@ -32,9 +34,9 @@
   const pageStyle = document.createElement('style');
   pageStyle.textContent = `#yt-multiselect-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;margin:0 4px;border:0;border-radius:50%;background:transparent;color:#065fd4;cursor:pointer}html[dark] #yt-multiselect-toggle{color:#3ea6ff}#yt-multiselect-toggle:hover{background:var(--yt-spec-10-percent-layer,#e5e5e5)}#yt-multiselect-toggle[aria-pressed=true]{background:var(--yt-spec-badge-chip-background,#e5e5e5)}#yt-multiselect-toggle:focus-visible{outline:2px solid currentColor;outline-offset:2px}#yt-multiselect-toggle svg{width:24px;height:24px;fill:currentColor}.yt-multiselect-row{position:relative!important}.yt-multiselect-enabled,.yt-multiselect-enabled *{cursor:pointer!important}.yt-multiselect-checkbox[hidden]{display:none!important}.yt-multiselect-checkbox{appearance:none!important;position:absolute!important;right:0;bottom:0;width:44px;height:44px;z-index:10;cursor:pointer;margin:0;border:0!important;border-radius:6px 0 12px 0;background:transparent!important;background-repeat:no-repeat!important;background-position:center!important;background-size:28px 28px!important;opacity:0}.yt-multiselect-checkbox:checked{opacity:1;background-color:#065fd4!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m4 12 5 5L20 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E")!important}html[dark] .yt-multiselect-checkbox:checked{background-color:#3ea6ff!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m4 12 5 5L20 6' fill='none' stroke='%230f0f0f' stroke-width='3'/%3E%3C/svg%3E")!important}.yt-multiselect-checkbox:focus-visible{opacity:1;outline:2px solid #065fd4;outline-offset:-3px}html[dark] .yt-multiselect-checkbox:focus-visible{outline-color:#3ea6ff}.yt-multiselect-row:has(.yt-multiselect-checkbox:focus-visible){outline:2px solid #065fd4;outline-offset:-2px}html[dark] .yt-multiselect-row:has(.yt-multiselect-checkbox:focus-visible){outline-color:#3ea6ff}.yt-multiselect-checkbox:disabled{cursor:default}.yt-multiselect-enabled:hover{background-color:rgba(6,95,212,.08)!important}.yt-multiselect-row.yt-multiselect-chosen{background-color:#d5e5fb!important}html[dark] .yt-multiselect-enabled:hover{background-color:rgba(62,166,255,.12)!important}html[dark] .yt-multiselect-row.yt-multiselect-chosen{background-color:#254f70!important}`;
   document.documentElement.append(pageStyle);
-  const bar = root.querySelector('.bar'), menu = root.querySelector('.menu'), backdrop = root.querySelector('.backdrop');
+  const bar = root.querySelector('.bar'), menu = root.querySelector('.menu'), backdrop = root.querySelector('.backdrop'), panel = root.querySelector('.panel');
   const selected = new Map(), rowBoxes = new WeakMap();
-  let enabled = false, scope = navigationScope(), snapshot = null, toggleButton, timer, toastTimer, lastAnchor = null, working = false, readPending = false, needsReload = false, dialogFocus;
+  let enabled = false, scope = navigationScope(), snapshot = null, toggleButton, timer, toastTimer, lastAnchor = null, working = false, readPending = false, needsReload = false, dialogFocus, noticeRevision = 0;
 
   function svg(name) {
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
@@ -48,22 +50,24 @@
   function validVideo(item) { return /^[A-Za-z0-9_-]{11}$/.test(item?.videoId || ''); }
   function links(items = [...selected.values()]) { return items.filter(validVideo).map(item => `https://www.youtube.com/watch?v=${item.videoId}`).join('\n'); }
   function notice(text, actionText, action, persistent = false) {
+    noticeRevision++;
     const toast = root.querySelector('.toast'); toast.replaceChildren(element('span', text, 'toast-message'));
     if (actionText) toast.append(button(actionText, action));
+    if (text) { const close = button('', () => notice(''), 'icon'); close.innerHTML = svg('close'); close.setAttribute('aria-label', 'Dismiss notice'); toast.append(close); }
     toast.hidden = !text; clearTimeout(toastTimer);
     if (!persistent) toastTimer = setTimeout(() => { toast.hidden = true; }, 6500);
   }
   function messageDialog(title, text) { const body = dialog(title); body.append(element('p', text, 'error-copy')); if (/saved operation before starting another/i.test(text)) body.append(button('Review saved operation', recoveryDialog)); else if (playlistId()) body.append(button('Check playlist reader', readerDialog)); footer(body); }
   function announce(text) { const full = String(text || ''); notice(full.length > 140 ? `${full.slice(0, 110).trim()}…` : full, full.length > 140 ? 'Details' : null, () => messageDialog('Operation details', full)); }
   function refreshNotice(text) { notice(text, 'Refresh', () => location.reload(), true); }
-  function report(error) { if (/saved operation before starting another/i.test(error?.message || '')) { notice('A stopped operation needs review.', 'Review', recoveryDialog, true); return; } if (error?.refreshPage) { refreshNotice(error.message); return; } const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
+  function report(error) { closePanel(); if (/saved operation before starting another/i.test(error?.message || '')) { notice('A stopped operation needs review.', 'Review', recoveryDialog, true); return; } if (error?.refreshPage) { refreshNotice(error.message); return; } const full = error?.message || String(error); notice('Couldn’t complete this step.', 'Details', () => messageDialog('Couldn’t complete this step', full), true); }
   async function send(type, values = {}) {
     const disconnected = () => Object.assign(new Error('Extension updated. Refresh YouTube to reconnect.'), { refreshPage: true });
     if (typeof chrome === 'undefined' || typeof chrome.runtime?.sendMessage !== 'function') throw disconnected();
     let result;
     try { result = await chrome.runtime.sendMessage({ type, ...values }); }
     catch (error) { if (/extension context invalidated/i.test(error.message || '')) throw disconnected(); throw error; }
-    if (!result?.ok) throw new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.');
+    if (!result?.ok) throw Object.assign(new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.'), { jobId: result?.jobId });
     return result;
   }
   function canonical(item) { return { ...item, key: item.setVideoId ? `entry:${item.setVideoId}` : item.key }; }
@@ -129,7 +133,7 @@
   }
   function scan() {
     mountToggle();
-    if (scope !== navigationScope()) { scope = navigationScope(); selected.clear(); snapshot = null; lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
+    if (scope !== navigationScope()) { scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); snapshot = null; lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
     const entries = loadedRows(), currentRows = new Set(entries.map(entry => entry.row));
     for (const row of document.querySelectorAll('.yt-multiselect-row')) if (!currentRows.has(row)) { row.classList.remove('yt-multiselect-enabled', 'yt-multiselect-chosen'); const box = rowBoxes.get(row); if (box) box.hidden = true; }
     for (const { row, item } of entries) {
@@ -140,7 +144,7 @@
           if (!enabled) return;
           if (event.target !== checkbox) event.preventDefault();
           event.stopImmediatePropagation();
-          const current = info(row); if (!current || working) return;
+          const current = info(row); if (!current || working) return; closePanel(); showMenu(false);
           const choose = !selected.has(current.key), entries = loadedRows();
           const from = entries.findIndex(entry => entry.item.key === lastAnchor), to = entries.findIndex(entry => entry.row === row);
           const range = event.shiftKey && from >= 0 ? entries.slice(Math.min(from, to), Math.max(from, to) + 1) : [{ item: current }];
@@ -161,20 +165,20 @@
   }
   function syncRows() { scan(); }
   async function readPlaylist() {
-    const id = playlistId(), capturedScope = scope;
+    const id = playlistId(), capturedScope = scope, revision = noticeRevision;
     if (needsReload) { refreshNotice('Refresh YouTube to update this playlist before another change.'); return; }
     if (!id || readPending) return;
     readPending = true;
-    try { const result = await send('READ', { playlistId: id, pickerVideoId: loadedRows().map(entry => entry.item).find(validVideo)?.videoId }); if (scope !== capturedScope) return; snapshot = result; reconcileSnapshot(); scan(); if (!result.complete) notice('Playlist editing is unavailable.', 'Details', () => messageDialog('Playlist editing is unavailable', (result.warnings || []).join('\n') || 'The complete playlist could not be verified. Copy links remains available.'), true); }
-    catch (error) { if (scope === capturedScope) report(error); }
+    try { const result = await send('READ', { playlistId: id, pickerVideoId: loadedRows().map(entry => entry.item).find(validVideo)?.videoId }); if (navigationScope() !== capturedScope) return; snapshot = result; reconcileSnapshot(); scan(); if (!result.complete && revision === noticeRevision && !working) notice('Playlist editing is unavailable.', 'Details', () => messageDialog('Playlist editing is unavailable', (result.warnings || []).join('\n') || 'The complete playlist could not be verified. Copy links remains available.'), true); }
+    catch (error) { if (enabled && navigationScope() === capturedScope && revision === noticeRevision && !working) report(error); }
     finally { readPending = false; if (enabled && scope !== capturedScope && playlistId()) readPlaylist(); }
   }
-  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { showMenu(false); closeDialog(); } scan(); if (value && !snapshot) readPlaylist(); }
+  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { showMenu(false); closeDialog(); closePanel(); notice(''); } scan(); if (value && !snapshot) readPlaylist(); }
   function selectAll() { const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); for (const item of items) selected.set(item.key, item); syncRows(); }
   function deselect() { selected.clear(); lastAnchor = null; syncRows(); }
   function showMenu(value, focus = true) {
     const trigger = root.querySelector('[data-action="menu"]'); host.toggleAttribute('data-menu-open', value); menu.hidden = !value; trigger.setAttribute('aria-expanded', String(value));
-    if (value) { buildMenu(); if (focus) menu.querySelector('button:not(:disabled)')?.focus(); }
+    if (value) { closePanel(); buildMenu(); if (focus) menu.querySelector('button:not(:disabled)')?.focus(); }
   }
   function buildMenu() {
     const focusedText = menu.contains(root.activeElement) ? root.activeElement?.textContent : null;
@@ -184,6 +188,7 @@
     add('Copy', () => queueSelection('copy'), !selected.size);
     add('Save to playlist', saveDialog);
     add('Copy links', () => copyLinks(), !selected.size);
+    add('Delete selected', deleteSelected, !exactSelection() || !snapshot?.editable);
     if (focusedText) [...menu.querySelectorAll('button')].find(node => node.textContent === focusedText && !node.disabled)?.focus();
   }
   async function copyLinks(items = [...selected.values()]) {
@@ -238,63 +243,88 @@
   async function queueSelection(kind) {
     if (!selected.size) throw new Error('Select videos first.');
     const result = exactSelection() ? await send('QUEUE', { ...selectionArgs(), kind }) : kind === 'copy' ? await send('QUEUE_LINKS', { items: [...selected.values()], kind }) : (() => { throw new Error('Open an editable playlist before cutting.'); })();
-    deselect(); announce(`${result.queue?.items.length || 0} videos saved. ${kind === 'move' ? 'Originals stay until copies are verified and you confirm removal.' : 'Choose Save to playlist when you’re ready.'}`); return result;
+    deselect(); notice(`${result.queue.items.length} videos ${kind === 'move' ? 'ready to move' : 'copied'}.`, 'Save', saveDialog); return result;
   }
-  function cutDialog() {
-    const args = selectionArgs(), body = dialog(`Cut ${selected.size} videos`), count = selected.size;
-    body.append(element('p', 'Your selection is saved before moving. Original videos stay in this playlist until the destination copies are verified and you confirm removal.'));
-    listVideos(body, [...selected.values()]);
-    footer(body, 'Save cut selection', async () => { await send('QUEUE', { ...args, kind: 'move' }); closeDialog(); deselect(); announce(`${count} videos saved for moving. Choose Save to playlist to pick the destination.`); });
+  function cutDialog() { return queueSelection('move'); }
+  function closePanel() { panel.hidden = true; panel.replaceChildren(); host.removeAttribute('data-panel-open'); }
+  function compact(title) {
+    closeDialog(); showMenu(false); notice(''); panel.replaceChildren(); panel.hidden = false; host.setAttribute('data-panel-open', '');
+    panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', title); panel.tabIndex = -1;
+    const header = element('div', '', 'dialog-header'), close = button('', () => { closePanel(); root.querySelector('[data-action="menu"]').focus(); }, 'icon');
+    close.innerHTML = svg('close'); close.setAttribute('aria-label', 'Close panel'); header.append(element('h2', title), close); panel.append(header); panel.focus(); return panel;
+  }
+  function compactActions(body, label, handler, danger = false) {
+    const foot = element('div', '', 'footer'); foot.append(button('Cancel', closePanel), button(label, handler, `text ${danger ? 'danger' : 'primary'}`)); body.append(foot); return foot;
+  }
+  function deleteSelected() {
+    const args = selectionArgs(), capturedScope = scope, count = selected.size;
+    const body = compact(`Delete ${count} ${count === 1 ? "video" : "videos"}?`);
+    body.append(element('p', `From ${snapshot.title || 'this playlist'} only.`));
+    compactActions(body, `Delete ${count}`, () => { if (navigationScope() !== capturedScope) throw new Error('The playlist changed. Select videos again.'); return operation('REMOVE', args); }, true);
   }
   async function operation(type, args) {
     if (working) throw new Error('Wait for the current step to finish.');
-    const operationScope = scope; working = true; closeDialog(); showMenu(false); syncRows(); announce('Working… Your selection is saved.');
-    try { const result = await send(type, args); if (result.job?.phase === 'completed' && ['REMOVE', 'SORT', 'FINISH_MOVE'].includes(type) && result.job.sourceId === playlistId()) { snapshot = null; needsReload = true; } if (result.job?.phase === 'ready_to_remove') { announce('Destination copies verified. Originals are still in place.'); moveReview(result.job); } else { if (scope === operationScope) deselect(); refreshNotice(type === 'REMOVE' ? 'Selected videos removed. Backup saved in recovery.' : type === 'SORT' ? 'Playlist sorted.' : type === 'FINISH_MOVE' ? 'Move completed. Copies and removals verified.' : 'Videos saved to the playlist.'); } return result; }
-    finally { working = false; syncRows(); }
+    const operationScope = scope; working = true; closeDialog(); closePanel(); showMenu(false); syncRows(); announce('Working…');
+    try {
+      let result;
+      try { result = await send(type, args); }
+      catch (error) {
+        if (!['TRANSFER', 'PASTE'].includes(type)) throw error;
+        const { activeJob } = await send('STATUS');
+        if (!error.jobId || activeJob?.id !== error.jobId || activeJob.targetId !== args.targetId || (args.playlistId && activeJob.sourceId !== args.playlistId)) throw error;
+        try { result = await send('CHECK_OPERATION', { jobId: activeJob.id }); }
+        catch { if (enabled && navigationScope() === operationScope) pendingReview(activeJob); return; }
+      }
+      if (!enabled || navigationScope() !== operationScope) return result;
+      if (result.job?.phase === 'ready_to_remove') moveReview(result.job);
+      else {
+        deselect(); announce(type === 'REMOVE' ? 'Videos deleted from playlist.' : type === 'FINISH_MOVE' ? 'Videos moved.' : 'Videos saved.');
+        if ((['REMOVE', 'FINISH_MOVE'].includes(type) && result.job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId())) location.reload();
+      }
+      return result;
+    } finally { working = false; syncRows(); }
   }
   async function transferDialog(kind, savedQueue = null) {
-    if (kind === 'move' && !savedQueue) selectionArgs();
     const selection = savedQueue ? [...savedQueue.items] : [...selected.values()]; if (!selection.length) return;
     const capturedScope = scope, sourceId = savedQueue ? savedQueue.sourceId : playlistId(), args = !savedQueue && exactSelection() ? selectionArgs() : null;
-    const body = dialog(kind === 'move' ? `Move ${selection.length} videos` : `Save ${selection.length} videos to playlist`);
-    body.append(element('p', kind === 'move' ? 'Copies are verified first. You review removal of the originals in a separate step.' : 'Adds copies to the destination playlist.'));
-    const label = element('label', 'Playlist'); label.htmlFor = 'yt-select-destination'; const select = element('select'); select.id = label.htmlFor; select.append(element('option', 'Loading your playlists…')); select.disabled = true; body.append(label, select);
-    const label2 = element('label', 'Or paste a playlist URL'); label2.htmlFor = 'yt-playlist-url'; const input = element('input'); input.id = label2.htmlFor; input.placeholder = 'https://www.youtube.com/playlist?list=…'; body.append(label2, input);
-    listVideos(body, selection);
-    footer(body, kind === 'move' ? 'Copy, then review removal' : 'Save copies', async () => {
-      if (scope !== capturedScope) throw new Error('The page changed. Close this dialog and select videos again.');
-      const targetId = targetPlaylist(input.value.trim() || select.value); if (!targetId) throw new Error('Choose a destination playlist.');
-      if (targetId === sourceId) throw new Error('Choose a different playlist.');
-      if (savedQueue) await operation('PASTE', { targetId, expectedQueueId: savedQueue.id });
-      else if (args) await operation('TRANSFER', { ...args, kind, targetId });
-      else { const saved = await send('QUEUE_LINKS', { items: selection, kind: 'copy' }); await operation('PASTE', { targetId, expectedQueueId: saved.queue.id }); }
-    });
-    try { const result = await send('PLAYLISTS', { videoId: selection[0].videoId }); if (!body.isConnected) return; select.replaceChildren(); const empty = element('option', 'Choose a playlist'); empty.value = ''; select.append(empty); for (const item of [...(result.playlists || [])].sort((a, b) => (a.title || '').localeCompare(b.title || ''))) { if ((item.id || item.playlistId) === sourceId) continue; const option = element('option', item.title); option.value = item.id || item.playlistId; select.append(option); } select.disabled = false; }
-    catch { if (body.isConnected) { select.replaceChildren(element('option', 'Paste a playlist URL below')); select.disabled = true; } }
+    const body = compact(`Save ${selection.length} ${selection.length === 1 ? "video" : "videos"} to…`), token = element('div'); body.append(token);
+    const search = element('input'); search.placeholder = 'Find a playlist'; search.setAttribute('aria-label', 'Find a playlist');
+    const choices = element('div', '', 'choices'); choices.append(element('p', 'Loading playlists…')); token.append(search, choices);
+    const save = async value => {
+      if (navigationScope() !== capturedScope || !token.isConnected) return;
+      const targetId = targetPlaylist(value); if (!targetId || targetId === sourceId) throw new Error('Choose a different destination playlist.');
+      if (savedQueue) return operation('PASTE', { targetId, expectedQueueId: savedQueue.id });
+      if (args) return operation('TRANSFER', { ...args, kind, targetId });
+      const saved = await send('QUEUE_LINKS', { items: selection, kind: 'copy' });
+      return operation('PASTE', { targetId, expectedQueueId: saved.queue.id });
+    };
+    const details = element('details'), input = element('input'); input.placeholder = 'Playlist URL'; input.setAttribute('aria-label', 'Playlist URL'); details.append(element('summary', 'Use a playlist link'), input, button('Save', () => save(input.value.trim()))); token.append(details); search.focus();
+    try {
+      const result = await send('PLAYLISTS', { videoId: selection[0].videoId }); if (!token.isConnected) return;
+      const playlists = (result.playlists || []).filter(item => (item.id || item.playlistId) !== sourceId).sort((a,b) => a.title.localeCompare(b.title));
+      const render = () => { choices.replaceChildren(); for (const item of playlists.filter(item => item.title.toLowerCase().includes(search.value.toLowerCase()))) choices.append(button(item.title, () => save(item.id || item.playlistId))); if (!choices.children.length) choices.append(element('p', 'No matching playlists.')); };
+      search.addEventListener('input', render); render();
+    } catch { if (token.isConnected) { choices.replaceChildren(element('p', 'Use a playlist link below.')); details.open = true; } }
   }
   async function saveDialog() {
-    const status = await send('STATUS');
-    if (status.activeJob) return recoveryDialog();
+    const capturedScope = scope, status = await send('STATUS'); if (navigationScope() !== capturedScope) return;
+    if (status.activeJob) return pendingReview(status.activeJob);
     if (selected.size) return transferDialog('copy');
-    if (!status.queue?.items.length) throw new Error('Select videos or choose Copy or Cut first.');
-    return transferDialog(status.queue.kind === 'move' ? 'move' : 'copy', status.queue);
+    if (!status.queue?.items.length) throw new Error('Select videos first.');
+    return transferDialog(status.queue.kind, status.queue);
   }
   function targetPlaylist(value) { try { return new URL(value).searchParams.get('list'); } catch { return /^(WL|LL|PL[A-Za-z0-9_-]+|UU[A-Za-z0-9_-]+|OLAK5uy_[A-Za-z0-9_-]+)$/.test(value) ? value : null; } }
-  async function pasteDialog() {
-    const targetId = playlistId(), capturedScope = scope, status = await send('STATUS');
-    if (scope !== capturedScope) return;
-    if (!status.queue?.items.length) throw new Error('No saved selection. Select videos and choose Copy or Cut first.');
-    const body = dialog(`Paste ${status.queue.items.length} videos`); body.append(element('p', `Destination: ${snapshot?.title || targetId}`));
-    if (status.queue.kind === 'move') body.append(element('p', 'Copies are verified first. Originals stay until you confirm their removal.'));
-    listVideos(body, status.queue.items);
-    footer(body, 'Paste copies', async () => { if (scope !== capturedScope) throw new Error('The destination page changed.'); await operation('PASTE', { targetId, expectedQueueId: status.queue.id }); });
-  }
+  function pasteDialog() { return saveDialog(); }
   function moveReview(job) {
-    const body = dialog('Copies verified. Remove originals?');
-    const remaining = job.items.filter(item => !job.removed?.includes(item.setVideoId));
-    body.append(element('p', `${job.items.length} videos were copied to the destination playlist. These ${remaining.length} original entries are still in the source playlist.`)); listVideos(body, remaining);
-    const foot = footer(body, `Remove ${remaining.length} originals`, async () => { await operation('FINISH_MOVE', { jobId: job.id }); }, true);
-    foot.firstChild.textContent = 'Keep originals';
+    const body = compact('Finish moving?'); body.append(element('p', `${job.items.length} copies saved. Remove the originals?`));
+    const foot = compactActions(body, 'Remove originals', () => operation('FINISH_MOVE', { jobId: job.id }), true);
+    foot.firstChild.textContent = 'Keep copies'; foot.firstChild.replaceWith(button('Keep copies', async () => { await send('DISMISS', { jobId: job.id }); closePanel(); announce('Copies saved. Originals kept.'); }));
+  }
+  function pendingReview(job) {
+    if (job.phase === 'ready_to_remove') return moveReview(job);
+    const body = compact('Check saved videos'); body.append(element('p', 'The last save needs checking. Originals are kept.'));
+    if (['copy', 'move'].includes(job.kind)) body.append(button('Check again', () => operation('CHECK_OPERATION', { jobId: job.id }), 'text primary'));
+    body.append(button('Keep originals and close', async () => { await send('DISMISS', { jobId: job.id }); closePanel(); notice(''); }), button('Details', () => { closePanel(); return recoveryDialog(); }));
   }
   async function recoveryDialog() {
     const status = await send('STATUS'), body = dialog('Saved selections & recovery');
@@ -333,8 +363,9 @@
   const actions = { close: () => toggle(false), all: selectAll, clear: deselect, links: () => copyLinks(), save: saveDialog, menu: () => showMenu(menu.hidden) };
   root.addEventListener('click', event => { const action = event.target.closest?.('[data-action]')?.dataset.action; if (action) Promise.resolve().then(actions[action]).catch(report); });
   backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDialog(); });
-  document.addEventListener('click', event => { if (!event.composedPath().includes(host)) showMenu(false); });
+  document.addEventListener('click', event => { if (!event.composedPath().includes(host)) { showMenu(false); closePanel(); } });
   document.addEventListener('keydown', event => {
+    if (!panel.hidden && event.key === 'Escape') { event.preventDefault(); closePanel(); root.querySelector('[data-action="menu"]').focus(); return; }
     if (!backdrop.hidden) {
       if (event.key === 'Escape') { event.preventDefault(); closeDialog(); return; }
       if (event.key === 'Tab') { const nodes = [...backdrop.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,summary')].filter(node => node.getClientRects().length); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1], active = root.activeElement; if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
@@ -360,10 +391,10 @@
   document.addEventListener('yt-navigate-finish', () => { closeDialog(); scan(); });
   chrome.runtime.onMessage?.addListener(message => { if (message.type === 'TOGGLE') toggle(!enabled); });
   chrome.storage?.onChanged?.addListener((changes, area) => {
-    if (area !== 'local' || !changes.activeJob?.newValue || !enabled) return;
+    if (area !== 'local' || !changes.activeJob?.newValue || !enabled || !working) return;
     const job = changes.activeJob.newValue;
     if (job.phase === 'copying') announce(`Copying ${job.copied?.length || 0} / ${job.items.length} videos… Originals kept.`);
-    if (job.phase === 'interrupted') notice('Operation stopped. Your videos are saved.', 'Review', recoveryDialog, true);
+
   });
   scan();
 })();

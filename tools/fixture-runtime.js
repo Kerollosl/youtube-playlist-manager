@@ -6,7 +6,7 @@ const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
 window.chrome = {
   runtime: {
-    getManifest: () => ({ version: '1.1.2' }),
+    getManifest: () => ({ version: '1.2.0' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
       if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
@@ -14,6 +14,15 @@ window.chrome = {
       if (message.type === 'QUEUE' || message.type === 'QUEUE_LINKS') {
         fixtureStorage.queue = { id: crypto.randomUUID(), kind: message.kind, sourceId: 'WL', items: message.items || fixtureItems.filter(item => message.keys.includes(item.setVideoId)), savedAt: Date.now() };
         return { ok: true, queue: structuredClone(fixtureStorage.queue) };
+      }
+      if (url.searchParams.get('scenario') === 'late-copy' && message.type === 'TRANSFER') {
+        fixtureStorage.activeJob = { id: 'late-demo', kind: 'copy', phase: 'interrupted', sourceId: 'WL', targetId: message.targetId, items: fixtureItems.filter(item => message.keys.includes(item.setVideoId)) };
+        return { ok: false, error: 'YouTube did not return a complete playlist.', jobId: 'late-demo' };
+      }
+      if (message.type === 'CHECK_OPERATION' && fixtureStorage.activeJob?.id === message.jobId) {
+        const job = { ...fixtureStorage.activeJob, phase: 'completed' }; fixtureStorage.activeJob = null;
+        document.getElementById('results').textContent = 'Read-only verification completed. No adds replayed.';
+        return { ok: true, job };
       }
       if (message.type === 'PLAYLISTS') return { ok: true, playlists: [{ playlistId: 'PLdemo', title: 'Research notes' }] };
       return { ok: false, error: 'Live changes are disabled in this synthetic fixture.' };

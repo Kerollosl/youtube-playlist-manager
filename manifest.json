@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "YouTube Multiselect (Custom)",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Multiselect inside YouTube: copy selected links as plain text and move videos with verified copies and recovery.",
   "minimum_chrome_version": "120",
   "permissions": [

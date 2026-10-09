@@ -21,7 +21,7 @@ The content script host sits outside `ytd-app`; it explicitly mirrors the docume
 
 ## Layout and hierarchy
 
-A 56px floating bottom toolbar sits 20px from the desktop edge and 12px on narrow viewports. It contains the selection count, Copy links, Select all, Deselect all, More, and Close. The menu contains only Cut, Copy, Save to playlist, and Copy links. Save stays in the menu.
+A 56px floating bottom toolbar sits 20px from the desktop edge and 12px on narrow viewports. It contains the selection count, Copy links, Select all, Deselect all, More, and Close. The menu contains Cut, Copy, Save to playlist, Copy links, and Delete selected. Save stays in the menu.
 
 While selection mode is enabled, clicking anywhere in a video card selects or deselects it instead of opening the video. The native card layout stays in place. Selected cards use a solid blue surface and a 44px blue corner checkmark. Keyboard users can toggle the same selection through a focusable checkbox, with a visible card focus outline. Shift-click selects or clears a range.
 

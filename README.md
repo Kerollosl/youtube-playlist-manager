@@ -10,7 +10,7 @@ A custom Chrome extension that works directly inside YouTube. The interface foll
 - Copy selections into a durable local clipboard; Cut queues a move without removing originals.
 - Paste to another playlist using YouTube's signed-in session.
 - Verify destination copies before offering a separate confirmation to remove originals.
-- A small menu contains only Cut, Copy, Save to playlist, and Copy links. Operation backups stay available if a step fails.
+- A small menu contains Cut, Copy, Save to playlist, Copy links, and Delete selected. Operation backups stay available if a step fails.
 - Use YouTube's light/dark colors. All controls and dialogs stay on the YouTube page.
 
 ## Install
@@ -64,6 +64,17 @@ npm test
 npm run validate
 ```
 
-Tests cover exact duplicate occurrences, scoped pagination, modern empty playlist identity and ownership, account changes, lost responses, durable Cut/Save behavior, failed copies, and storage failure before writes. Browser fixtures verify full-card selection, the four-action menu, saved Cut selections, themes, narrow layouts, link format, and rerender behavior. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
+Tests cover exact duplicate occurrences, scoped pagination, modern empty playlist identity and ownership, account changes, lost responses, durable Cut/Save behavior, failed copies, and storage failure before writes. Browser fixtures verify full-card selection, the five-action menu, saved Cut selections, themes, narrow layouts, link format, and rerender behavior. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
 
 Sources: [Original interface](https://chromewebstore.google.com/detail/multiselect-for-youtube/gpgbiinpmelaihndlegbgfkmnpofgfei), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [Watch Later API limitation](https://developers.google.com/youtube/v3/docs/playlistItems/list), [YouTube.js playlist action reference](https://github.com/LuanRT/YouTube.js/blob/main/src/core/managers/PlaylistManager.ts).
+
+### Version 1.2.0
+
+- Compact searchable destination picker; Cut stores the selection immediately.
+- Delete selected uses a small count confirmation and saves a source backup.
+- A reviewed delete archives an interrupted copy without discarding its saved links; unfinished moves remain protected.
+- Incomplete browse results and unchanged post-delete results receive bounded read-only retries. Writes are never replayed automatically.
+- Late copy results are reconciled against the exact failed job and exact destination counts.
+- Verified deletion refreshes YouTube to show the current playlist.
+
+Validation: 75 automated tests and manifest/syntax validation passed. The browser fixture verified compact delete confirmation and late-copy success reporting. Real playlist deletion was not executed during this validation. Reload the extension and then YouTube to activate this release.

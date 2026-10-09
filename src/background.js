@@ -1,12 +1,26 @@
 import { youtubeCommand } from './youtube-api.js';
-import { assertAccount, assertComplete, exactItems, copyItems, removeItems, assertCopied } from './operations.js';
+import { assertAccount, assertComplete, exactItems, copyItems, removeItems, assertCopied, counts } from './operations.js';
 
 let busy = false;
 let lastEditAt = 0;
 const validPlaylist = id => typeof id === 'string' && /^[A-Za-z0-9_-]{2,128}$/.test(id);
 const validVideo = id => typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id);
-const read = (tabId, playlistId, pickerVideoId) => api(tabId, { type: 'read', playlistId,
-  ...(validVideo(pickerVideoId) ? { pickerVideoId } : {}) });
+async function read(tabId, playlistId, pickerVideoId, expectedFingerprint) {
+  // Retry incomplete browse snapshots only; mutations and identity errors never retry.
+  let fingerprint = expectedFingerprint;
+  let snapshot;
+  for (const delay of [0, 250, 750]) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    snapshot = await api(tabId, { type: 'read', playlistId,
+      ...(validVideo(pickerVideoId) ? { pickerVideoId } : {}) });
+    if (snapshot.playlistId !== playlistId) throw new Error('The playlist changed. Operation stopped.');
+    if (!snapshot.fingerprint) throw new Error('Cannot identify the YouTube account.');
+    if (fingerprint !== undefined && snapshot.fingerprint !== fingerprint) throw new Error('The YouTube account changed. Operation stopped.');
+    fingerprint = snapshot.fingerprint;
+    if (snapshot.complete !== false) return snapshot;
+  }
+  return snapshot; // Existing completeness guards fail closed after the retry budget.
+}
 
 async function savedProbe() {
   const { queue, activeJob, history = [] } = await chrome.storage.local.get(['queue', 'activeJob', 'history']);
@@ -50,7 +64,7 @@ async function run(message) {
     return { ...stored, busy };
   }
   if (message.type === 'QUEUE') {
-    const source = await api(message.tabId, { type: 'read', playlistId: message.playlistId });
+    const source = await read(message.tabId, message.playlistId, undefined, message.expectedFingerprint);
     assertAccount(source, message.expectedFingerprint);
     if (message.kind === 'move' && !source.editable) throw new Error('This source playlist cannot be changed.');
     const items = exactItems(message.keys, source);
@@ -71,6 +85,7 @@ async function run(message) {
     busy = true;
     try {
       const { activeJob } = await chrome.storage.local.get('activeJob');
+      if (message.jobId && message.jobId !== activeJob?.id) throw new Error('The saved operation changed.');
       if (activeJob) { activeJob.phase = 'stopped'; await archive(activeJob); }
       return {};
     } finally { busy = false; }
@@ -80,12 +95,30 @@ async function run(message) {
   let job;
   try {
     const { activeJob, queue } = await chrome.storage.local.get(['activeJob', 'queue']);
+    if (message.type === 'CHECK_OPERATION') {
+      if (!activeJob || !['copy', 'move'].includes(activeJob.kind)) throw new Error('There is no saved copy or move to check.');
+      if (message.jobId && message.jobId !== activeJob.id) throw new Error('The saved operation changed.');
+      if (activeJob.removed?.length || activeJob.intent?.kind === 'remove') throw new Error('Removal already started. Review the saved operation.');
+      const destination = await read(message.tabId, activeJob.targetId, activeJob.items[0]?.videoId, activeJob.fingerprint);
+      assertCopied(activeJob, destination);
+      const actual = counts(destination.items), baseline = counts(activeJob.targetBefore.items), added = counts(activeJob.items);
+      if (Object.entries(added).some(([id, count]) => (actual[id] || 0) !== (baseline[id] || 0) + count)) throw new Error('Conflicting destination counts. Review the saved operation.');
+      // Assign only after verification so failed checks leave the saved job untouched.
+      job = activeJob;
+      job.copied = job.items.map(item => item.setVideoId);
+      job.intent = null;
+      delete job.error;
+      job.phase = job.kind === 'move' ? 'ready_to_remove' : 'completed';
+      if (job.kind === 'move') await save(job);
+      else await archive(job);
+      return { job };
+    }
     if (message.type === 'FINISH_MOVE') {
       job = activeJob;
       if (job?.phase !== 'ready_to_remove' || job.kind !== 'move' || message.jobId !== job.id) throw new Error('There is no verified move to finish.');
-      const source = await read(message.tabId, job.sourceId, job.items[0]?.videoId);
+      const source = await read(message.tabId, job.sourceId, job.items[0]?.videoId, job.fingerprint);
       assertAccount(source, job.fingerprint);
-      const destination = await read(message.tabId, job.targetId, job.items[0]?.videoId);
+      const destination = await read(message.tabId, job.targetId, job.items[0]?.videoId, job.fingerprint);
       assertCopied(job, destination);
       if (!source.editable) throw new Error('The source playlist is not editable.');
       job.phase = 'removing';
@@ -95,7 +128,10 @@ async function run(message) {
       await archive(job);
       return { job };
     }
-    if (activeJob) throw new Error('Review or stop the saved operation before starting another.');
+    // A stopped copy cannot remove originals. Preserve it in history when an
+    // independently reviewed delete starts; never bypass an unfinished move.
+    const archiveStoppedCopy = message.type === 'REMOVE' && activeJob?.kind === 'copy' && activeJob.phase === 'interrupted';
+    if (activeJob && !archiveStoppedCopy) throw new Error('Review or stop the saved operation before starting another.');
     if (!['PASTE', 'TRANSFER', 'REMOVE', 'SORT'].includes(message.type)) throw new Error('Unsupported command.');
     const pasted = message.type === 'PASTE';
     if (pasted && !queue) throw new Error('Copy or cut videos first.');
@@ -111,7 +147,7 @@ async function run(message) {
       fingerprint = queue.fingerprint;
     } else {
       if (!validPlaylist(sourceId)) throw new Error('No valid source playlist.');
-      source = await api(message.tabId, { type: 'read', playlistId: sourceId });
+      source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint);
       assertAccount(source, pasted ? queue.fingerprint : message.expectedFingerprint);
       fingerprint = source.fingerprint;
       items = exactItems(pasted ? queue.items.map(item => item.setVideoId) : message.keys, source);
@@ -120,10 +156,11 @@ async function run(message) {
       if (kind === 'sort' && items.length !== source.items.length) throw new Error('The playlist changed since the sort was reviewed. Refresh and try again.');
       if (kind === 'sort' && !source.canReorder) throw new Error('YouTube does not allow this playlist to be reordered.');
     }
+    if (archiveStoppedCopy) await archive({ ...activeJob, phase: 'stopped' });
     job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now() };
     if (kind === 'copy' || kind === 'move') {
       if (!validPlaylist(message.targetId) || message.targetId === sourceId) throw new Error('Choose a different destination playlist.');
-      const target = await read(message.tabId, message.targetId, items[0]?.videoId);
+      const target = await read(message.tabId, message.targetId, items[0]?.videoId, fingerprint);
       assertAccount(target, fingerprint);
       if (!target.editable) throw new Error('The destination playlist is not editable.');
       job.targetId = message.targetId;
@@ -151,21 +188,21 @@ async function run(message) {
       // Moving each item after its predecessor makes the final sequence exact.
       // Leave desired[0] in place until subsequent moves bring it to the front.
       for (let i = 1; i < desired.length; i++) {
-        const before = await api(message.tabId, { type: 'read', playlistId: sourceId });
+        const before = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
         assertAccount(before, job.fingerprint);
         if (before.items.length !== source.items.length || source.items.some(item => !before.items.some(entry => entry.setVideoId === item.setVideoId && entry.videoId === item.videoId))) throw new Error('Playlist membership changed. Sorting stopped.');
         const action = { action: 'ACTION_MOVE_VIDEO_AFTER', setVideoId: desired[i].setVideoId, movedSetVideoIdPredecessor: desired[i - 1].setVideoId };
         job.intent = action;
         await save(job);
         await api(message.tabId, { type: 'edit', playlistId: sourceId, action, expectedFingerprint: job.fingerprint });
-        const after = await api(message.tabId, { type: 'read', playlistId: sourceId });
+        const after = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
         assertAccount(after, job.fingerprint);
         const position = after.items.findIndex(item => item.setVideoId === desired[i].setVideoId);
         if (position < 1 || after.items[position - 1].setVideoId !== desired[i - 1].setVideoId) throw new Error('Sort step could not be verified.');
         job.intent = null;
         await save(job);
       }
-      const final = await api(message.tabId, { type: 'read', playlistId: sourceId });
+      const final = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
       assertAccount(final, job.fingerprint);
       if (JSON.stringify(final.items.map(item => item.setVideoId)) !== JSON.stringify(desired.map(item => item.setVideoId))) throw new Error('Final sort order could not be verified.');
       job.phase = 'completed';
@@ -175,6 +212,7 @@ async function run(message) {
   } catch (error) {
     if (job && (await chrome.storage.local.get('activeJob')).activeJob?.id === job.id) {
       job.phase = 'interrupted'; job.error = error.message; await save(job);
+      error.jobId = job.id;
     }
     throw error;
   } finally { busy = false; }
@@ -182,7 +220,7 @@ async function run(message) {
 
 function makeIO(tabId, expectedFingerprint, pickerVideoId) {
   return {
-    read: playlistId => read(tabId, playlistId, pickerVideoId),
+    read: playlistId => read(tabId, playlistId, pickerVideoId, expectedFingerprint),
     edit: (playlistId, action) => api(tabId, { type: 'edit', playlistId, action, expectedFingerprint }),
     save,
   };
@@ -195,8 +233,8 @@ chrome.action.onClicked.addListener(tab => {
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.tab || !sender.url?.startsWith('https://www.youtube.com/')) return;
   // Sender identity determines the tab; webpage data cannot redirect an operation.
-  const allowed = ['READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT'];
+  const allowed = ['READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT'];
   if (!message || !allowed.includes(message.type)) { respond({ ok: false, error: 'Unsupported action.' }); return; }
-  run({ ...message, tabId: sender.tab.id }).then(result => respond({ ...result, ok: true })).catch(error => respond({ ok: false, error: error.message }));
+  run({ ...message, tabId: sender.tab.id }).then(result => respond({ ...result, ok: true })).catch(error => respond({ ok: false, error: error.message, jobId: error.jobId }));
   return true;
 });

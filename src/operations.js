@@ -107,13 +107,19 @@ export async function removeItems(job, io) {
     let mutationError;
     try { await io.edit(job.sourceId, { action: 'ACTION_REMOVE_VIDEO', setVideoId: item.setVideoId }); }
     catch (error) { mutationError = error; }
-    const after = await io.read(job.sourceId);
-    assertAccount(after, job.fingerprint);
     const expected = before.items.filter(entry => entry.setVideoId !== item.setVideoId).map(entry => entry.setVideoId);
-    const actual = after.items.map(entry => entry.setVideoId);
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      throw new Error(mutationError?.message || 'Removal result did not match the reviewed entry. Stopped.');
+    const unchanged = JSON.stringify(before.items.map(entry => entry.setVideoId));
+    let verified = false;
+    for (const delay of [0, 250, 500, 1000, 2000]) {
+      if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
+      const after = await io.read(job.sourceId);
+      assertAccount(after, job.fingerprint);
+      if (after.playlistId !== job.sourceId) throw new Error('The source playlist changed.');
+      const actual = JSON.stringify(after.items.map(entry => entry.setVideoId));
+      if (actual === JSON.stringify(expected)) { verified = true; break; }
+      if (actual !== unchanged) break; // Conflicting change: do not mask it with retries.
     }
+    if (!verified) throw new Error(mutationError?.message || 'Removal result did not match the reviewed entry. Stopped.');
     job.removed.push(item.setVideoId);
     job.intent = null;
     await io.save(job);
