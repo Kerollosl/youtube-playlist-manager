@@ -113,7 +113,7 @@ test('rejects a mismatched playlist', async () => {
 });
 
 test('allows only exact safe actions and acknowledges without claiming verification', async () => {
-  const { run, calls } = page([{ status: 'STATUS_SUCCEEDED' }]);
+  const { run, calls } = page([{ status: 'STATUS_SUCCEEDED' }, { status: 'STATUS_SUCCEEDED' }]);
   await assert.rejects(run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, action: { action: 'ACTION_DELETE_PLAYLIST' } }), /not permitted/);
   await assert.rejects(run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, action: { action: 'ACTION_REMOVE_VIDEO', videoId: VIDEO } }), /not permitted/);
   await assert.rejects(run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, action: { action: 'toString' } }), /not permitted/);
@@ -121,6 +121,22 @@ test('allows only exact safe actions and acknowledges without claiming verificat
   const result = await run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, action: { action: 'ACTION_REMOVE_VIDEO', setVideoId: 'one' } });
   assert.equal(result.verified, false);
   assert.equal(calls[0].body.actions[0].setVideoId, 'one');
+  const batch = await run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, actions: [
+    { action: 'ACTION_ADD_VIDEO', addedVideoId: VIDEO },
+    { action: 'ACTION_REMOVE_VIDEO', setVideoId: 'two' }
+  ] });
+  assert.equal(batch.verified, false);
+  assert.equal(calls[1].body.actions.length, 2);
+});
+
+test('invalid batches are rejected in full before any network request', async () => {
+  const { run, calls } = page([]);
+  const valid = { action: 'ACTION_ADD_VIDEO', addedVideoId: VIDEO };
+  for (const actions of [[], Array.from({ length: 51 }, () => valid), [valid, { action: 'ACTION_DELETE_PLAYLIST' }]]) {
+    await assert.rejects(run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, actions }), /playlist actions|not permitted/);
+  }
+  await assert.rejects(run({ type: 'edit', playlistId: 'PLtest', expectedFingerprint: FINGERPRINT, action: valid, actions: [valid] }), /not permitted/);
+  assert.equal(calls.length, 0);
 });
 
 test('HTTP 200 error, unknown and unreadable mutation responses fail closed', async () => {

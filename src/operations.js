@@ -4,6 +4,13 @@ export const counts = items => items.reduce((out, item) => {
   out[item.videoId] = (out[item.videoId] || 0) + 1;
   return out;
 }, Object.create(null));
+const BATCH_SIZE = 50;
+const chunks = items => Array.from({ length: Math.ceil(items.length / BATCH_SIZE) }, (_, index) => items.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE));
+const wait = (io, ms) => (io.wait || (delay => new Promise(resolve => setTimeout(resolve, delay))))(ms);
+async function editBatch(io, playlistId, actions) {
+  if (io.editBatch) return io.editBatch(playlistId, actions);
+  for (const action of actions) await io.edit(playlistId, action);
+}
 
 export function assertComplete(snapshot) {
   if (snapshot?.complete !== true) {
@@ -45,82 +52,145 @@ export function assertCopied(job, destination) {
   }
 }
 
-export async function copyItems(job, io) {
-  for (const item of job.items) {
-    const before = await io.read(job.targetId);
-    assertAccount(before, job.fingerprint);
-    const beforeCount = counts(before.items)[item.videoId] || 0;
-    job.intent = { kind: 'add', videoId: item.videoId, beforeCount };
-    await io.save(job); // Persist intent before network I/O.
-    let mutationError;
-    try { await io.edit(job.targetId, { action: 'ACTION_ADD_VIDEO', addedVideoId: item.videoId }); }
-    catch (error) { mutationError = error; }
-    // YouTube can acknowledge a write before the browse result reflects it.
-    // Recheck reads only: replaying an add after an unknown result can duplicate it.
-    let afterCount;
-    const delays = [0, 250, 500, 1000, 2000];
-    for (const [attempt, delay] of delays.entries()) {
-      if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
-      const after = await io.read(job.targetId);
-      assertAccount(after, job.fingerprint);
-      if (after.playlistId !== job.targetId) throw new Error('The destination changed.');
-      afterCount = counts(after.items)[item.videoId] || 0;
-      job.verification = { attempts: attempt + 1, beforeCount, expectedCount: beforeCount + 1,
-        observedCount: afterCount, checkedAt: Date.now() };
-      await io.save(job);
-      if (afterCount !== beforeCount) break; // Success or a conflicting count: never mask ambiguity.
+export function reorderPlan(snapshot, keys, position, beforeId) {
+  const selected = new Set(exactItems(keys, snapshot).map(item => item.setVideoId));
+  const moving = snapshot.items.filter(item => selected.has(item.setVideoId));
+  const remaining = snapshot.items.filter(item => !selected.has(item.setVideoId));
+  let index;
+  if (position === 'top') index = 0;
+  else if (position === 'bottom') index = remaining.length;
+  else if (position === 'before') {
+    index = remaining.findIndex(item => item.setVideoId === beforeId);
+    if (index < 0) throw new Error('Choose an unselected video as the placement target.');
+  } else throw new Error('Choose top, bottom, or a playlist position.');
+  const desired = [...remaining.slice(0, index), ...moving, ...remaining.slice(index)];
+  const current = snapshot.items.map(item => item.setVideoId), actions = [];
+  let predecessor = remaining[index - 1]?.setVideoId;
+  for (const item of moving) {
+    const from = current.indexOf(item.setVideoId);
+    if ((from === 0 ? undefined : current[from - 1]) !== predecessor) {
+      actions.push({ action: 'ACTION_MOVE_VIDEO_AFTER', setVideoId: item.setVideoId,
+        ...(predecessor ? { movedSetVideoIdPredecessor: predecessor } : {}) });
+      current.splice(from, 1);
+      current.splice(predecessor ? current.indexOf(predecessor) + 1 : 0, 0, item.setVideoId);
     }
-    if (afterCount !== beforeCount + 1) {
-      throw new Error(mutationError?.message || `Copy could not be verified after ${job.verification.attempts} checks (expected ${beforeCount + 1} copies, found ${afterCount}). Stopped; no source videos were removed.`);
-    }
-    job.copied.push(item.setVideoId);
-    job.intent = null;
-    await io.save(job);
+    predecessor = item.setVideoId;
   }
-  // A subsequent browse can also lag after the final item check. Recheck only
-  // missing copies; account, identity and incomplete-read errors still stop at once.
-  const baseline = counts(job.targetBefore.items), expected = counts(job.items);
-  for (const [attempt, delay] of [0, 250, 500, 1000, 2000].entries()) {
-    if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
-    const destination = await io.read(job.targetId);
-    assertAccount(destination, job.fingerprint);
-    if (destination.playlistId !== job.targetId) throw new Error('The destination changed.');
-    const actual = counts(destination.items);
-    const missingCopies = Object.entries(expected).filter(([id, count]) => (actual[id] || 0) < (baseline[id] || 0) + count)
-      .map(([videoId, count]) => ({ videoId, expectedCount: (baseline[videoId] || 0) + count, observedCount: actual[videoId] || 0 }));
-    job.finalVerification = { attempts: attempt + 1, missingCopies, checkedAt: Date.now() };
-    await io.save(job);
-    if (!missingCopies.length || attempt === 4) { assertCopied(job, destination); return; }
-  }
+  return { actions, desiredIds: desired.map(item => item.setVideoId) };
 }
 
-export async function removeItems(job, io) {
-  if (job.kind === 'move') assertCopied(job, await io.read(job.targetId));
-  for (const item of job.items) {
-    const before = await io.read(job.sourceId);
-    assertAccount(before, job.fingerprint);
-    const current = before.items.find(entry => entry.setVideoId === item.setVideoId);
-    if (!current || current.videoId !== item.videoId) throw new Error('A source entry changed. Stopped; review the playlist.');
-    if (job.kind === 'move') assertCopied(job, await io.read(job.targetId));
-    job.intent = { kind: 'remove', setVideoId: item.setVideoId };
+export async function reorderItems(job, plan, io) {
+  let current = job.sourceBefore.items.map(item => item.setVideoId);
+  const videos = new Map(job.sourceBefore.items.map(item => [item.setVideoId, item.videoId]));
+  job.reordered = [];
+  job.desiredIds = plan.desiredIds;
+  for (const batch of chunks(plan.actions)) {
+    const expected = [...current];
+    for (const action of batch) {
+      expected.splice(expected.indexOf(action.setVideoId), 1);
+      expected.splice(action.movedSetVideoIdPredecessor ? expected.indexOf(action.movedSetVideoIdPredecessor) + 1 : 0, 0, action.setVideoId);
+    }
+    job.intent = { kind: 'reorder_batch', setVideoIds: batch.map(action => action.setVideoId), batchSize: batch.length };
     await io.save(job);
     let mutationError;
-    try { await io.edit(job.sourceId, { action: 'ACTION_REMOVE_VIDEO', setVideoId: item.setVideoId }); }
+    try { await editBatch(io, job.sourceId, batch); }
     catch (error) { mutationError = error; }
-    const expected = before.items.filter(entry => entry.setVideoId !== item.setVideoId).map(entry => entry.setVideoId);
-    const unchanged = JSON.stringify(before.items.map(entry => entry.setVideoId));
     let verified = false;
-    for (const delay of [0, 250, 500, 1000, 2000]) {
-      if (delay) await (io.wait || (ms => new Promise(resolve => setTimeout(resolve, ms))))(delay);
+    for (const [attempt, delay] of [0, 250, 500, 1000, 2000].entries()) {
+      if (delay) await wait(io, delay);
       const after = await io.read(job.sourceId);
       assertAccount(after, job.fingerprint);
       if (after.playlistId !== job.sourceId) throw new Error('The source playlist changed.');
-      const actual = JSON.stringify(after.items.map(entry => entry.setVideoId));
-      if (actual === JSON.stringify(expected)) { verified = true; break; }
-      if (actual !== unchanged) break; // Conflicting change: do not mask it with retries.
+      if (after.items.length !== videos.size || after.items.some(item => videos.get(item.setVideoId) !== item.videoId)) throw new Error('Playlist membership changed. Reordering stopped.');
+      const actual = after.items.map(item => item.setVideoId);
+      job.verification = { attempts: attempt + 1, batchSize: batch.length, completed: job.reordered.length, checkedAt: Date.now() };
+      if (JSON.stringify(actual) === JSON.stringify(expected)) { verified = true; break; }
+      if (JSON.stringify(actual) !== JSON.stringify(current)) break;
     }
-    if (!verified) throw new Error(mutationError?.message || 'Removal result did not match the reviewed entry. Stopped.');
-    job.removed.push(item.setVideoId);
+    if (!verified) throw new Error(mutationError?.message || 'Playlist order could not be verified. Reordering stopped.');
+    current = expected;
+    job.reordered.push(...batch.map(action => action.setVideoId));
+    job.intent = null;
+    await io.save(job);
+  }
+  if (JSON.stringify(current) !== JSON.stringify(plan.desiredIds)) throw new Error('Final playlist order could not be verified.');
+}
+
+export async function copyItems(job, io) {
+  const baseline = counts(job.targetBefore.items);
+  let processed = 0;
+  for (const batch of chunks(job.items)) {
+    const beforeAdded = counts(job.items.slice(0, processed));
+    const expectedAdded = counts(job.items.slice(0, processed + batch.length));
+    const actions = batch.map(item => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: item.videoId }));
+    job.intent = { kind: 'add_batch', videoIds: batch.map(item => item.videoId), batchSize: batch.length };
+    await io.save(job);
+    let mutationError;
+    try { await editBatch(io, job.targetId, actions); }
+    catch (error) { mutationError = error; }
+    let observed = Object.create(null);
+    const delays = [0, 250, 500, 1000, 2000];
+    for (const [attempt, delay] of delays.entries()) {
+      if (delay) await wait(io, delay);
+      const after = await io.read(job.targetId);
+      assertAccount(after, job.fingerprint);
+      if (after.playlistId !== job.targetId) throw new Error('The destination changed.');
+      const actual = counts(after.items);
+      const ids = Object.keys(expectedAdded);
+      const exact = ids.every(id => (actual[id] || 0) === (baseline[id] || 0) + expectedAdded[id]);
+      const unchanged = ids.every(id => (actual[id] || 0) === (baseline[id] || 0) + (beforeAdded[id] || 0));
+      observed = Object.fromEntries(ids.map(id => [id, actual[id] || 0]));
+      job.verification = { attempts: attempt + 1, batchSize: batch.length, completed: processed,
+        expected: Object.fromEntries(ids.map(id => [id, (baseline[id] || 0) + expectedAdded[id]])), observed, checkedAt: Date.now() };
+      if (exact) break;
+      if (!unchanged) throw new Error('Destination counts changed unexpectedly. Stopped; no source videos were removed.');
+    }
+    const verified = Object.entries(job.verification.expected).every(([id, expected]) => observed[id] === expected);
+    if (!verified) {
+      throw new Error(mutationError?.message || `Copy batch could not be verified after ${job.verification.attempts} checks. Stopped; no source videos were removed.`);
+    }
+    processed += batch.length;
+    job.copied.push(...batch.map(item => item.setVideoId));
+    job.intent = null;
+    await io.save(job);
+  }
+}
+
+export async function removeItems(job, io, verifiedDestination, verifiedSource = job.sourceBefore) {
+  assertAccount(verifiedSource, job.fingerprint);
+  if (verifiedSource.playlistId !== job.sourceId) throw new Error('The source playlist changed.');
+  const current = exactItems(job.items.map(item => item.setVideoId), verifiedSource);
+  if (current.some((item, index) => item.videoId !== job.items[index].videoId)) throw new Error('A source entry changed. Stopped; review the playlist.');
+  if (job.kind === 'move') job.removalBefore = verifiedSource;
+  const original = verifiedSource.items;
+  let processed = 0;
+  for (const batch of chunks(job.items)) {
+    if (job.kind === 'move') assertCopied(job, processed === 0 && verifiedDestination ? verifiedDestination : await io.read(job.targetId));
+    const beforeRemoved = new Set(job.items.slice(0, processed).map(item => item.setVideoId));
+    const removed = new Set(job.items.slice(0, processed + batch.length).map(item => item.setVideoId));
+    const beforeIds = original.filter(item => !beforeRemoved.has(item.setVideoId)).map(item => item.setVideoId);
+    const expectedIds = original.filter(item => !removed.has(item.setVideoId)).map(item => item.setVideoId);
+    const actions = batch.map(item => ({ action: 'ACTION_REMOVE_VIDEO', setVideoId: item.setVideoId }));
+    job.intent = { kind: 'remove_batch', setVideoIds: batch.map(item => item.setVideoId), batchSize: batch.length };
+    await io.save(job);
+    let mutationError;
+    try { await editBatch(io, job.sourceId, actions); }
+    catch (error) { mutationError = error; }
+    let verified = false;
+    for (const [attempt, delay] of [0, 250, 500, 1000, 2000].entries()) {
+      if (delay) await wait(io, delay);
+      const after = await io.read(job.sourceId);
+      assertAccount(after, job.fingerprint);
+      if (after.playlistId !== job.sourceId) throw new Error('The source playlist changed.');
+      const actualIds = after.items.map(entry => entry.setVideoId);
+      job.verification = { attempts: attempt + 1, batchSize: batch.length, completed: processed,
+        expectedItems: expectedIds.length, observedItems: actualIds.length, checkedAt: Date.now() };
+      if (JSON.stringify(actualIds) === JSON.stringify(expectedIds)) { verified = true; break; }
+      if (JSON.stringify(actualIds) !== JSON.stringify(beforeIds)) break;
+    }
+    if (!verified) throw new Error(mutationError?.message || 'Removal batch did not match the reviewed playlist. Stopped.');
+    processed += batch.length;
+    job.removed.push(...batch.map(item => item.setVideoId));
     job.intent = null;
     await io.save(job);
   }

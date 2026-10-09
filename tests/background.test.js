@@ -4,13 +4,14 @@ let listener;
 let data = {};
 let edits = [];
 let reads = [];
+let mutationRequests = [];
 let fingerprints = 'account-a';
 const item = { setVideoId: 'one', videoId: 'abcdefghijk', title: 'One', index: 0, durationSeconds: 90, channel: 'Channel' };
 let playlists;
 let readResult;
 const clone = value => structuredClone(value);
 function reset() {
-  data = {}; edits = []; reads = []; fingerprints = 'account-a'; readResult = null;
+  data = {}; edits = []; reads = []; mutationRequests = []; fingerprints = 'account-a'; readResult = null;
   playlists = {
     WL: { playlistId: 'WL', complete: true, editable: true, canReorder: true, fingerprint: fingerprints, items: [clone(item)] },
     PLtarget: { playlistId: 'PLtarget', complete: true, editable: true, fingerprint: fingerprints, items: [] }
@@ -28,9 +29,19 @@ globalThis.chrome = {
     if (command.type === 'read') { reads.push(clone(command)); return [{ result: readResult?.(command) ?? { ok: true, ...clone(playlists[command.playlistId]), fingerprint: fingerprints } }]; }
     if (command.type === 'playlists') return [{ result: { ok: true, fingerprint: fingerprints, playlists: [] } }];
     assert.equal(command.expectedFingerprint, fingerprints);
-    edits.push(clone(command));
-    if (command.action.action === 'ACTION_ADD_VIDEO') playlists[command.playlistId].items.push({ ...item, videoId: command.action.addedVideoId, setVideoId: `new-${edits.length}` });
-    else if (command.action.action === 'ACTION_REMOVE_VIDEO') playlists[command.playlistId].items = playlists[command.playlistId].items.filter(entry => entry.setVideoId !== command.action.setVideoId);
+    mutationRequests.push(clone(command));
+    for (const action of command.actions || [command.action]) {
+      edits.push({ ...clone(command), action });
+      if (action.action === 'ACTION_ADD_VIDEO') playlists[command.playlistId].items.push({ ...item, videoId: action.addedVideoId, setVideoId: `new-${edits.length}` });
+      else if (action.action === 'ACTION_REMOVE_VIDEO') playlists[command.playlistId].items = playlists[command.playlistId].items.filter(entry => entry.setVideoId !== action.setVideoId);
+      else if (action.action === 'ACTION_MOVE_VIDEO_AFTER') {
+        const items = playlists[command.playlistId].items;
+        const from = items.findIndex(entry => entry.setVideoId === action.setVideoId);
+        const [moved] = items.splice(from, 1);
+        const predecessor = items.findIndex(entry => entry.setVideoId === action.movedSetVideoIdPredecessor);
+        items.splice(predecessor + 1, 0, moved);
+      }
+    }
     return [{ result: { ok: true } }];
   } }
 };
@@ -54,12 +65,14 @@ test('paste cut selection verifies copies and leaves source pending explicit fin
   assert.equal(data.activeJob.phase, 'ready_to_remove');
   assert.equal(playlists.WL.items.length, 1);
   assert.equal(playlists.PLtarget.items.length, 1);
+  assert.equal(mutationRequests.length, 1);
   assert.ok(reads.filter(read => read.playlistId === 'PLtarget').every(read => read.pickerVideoId === item.videoId));
   const finish = await send({ type: 'FINISH_MOVE', jobId: data.activeJob.id });
   assert.equal(finish.ok, true);
   assert.equal(data.queue, null);
   assert.equal(playlists.WL.items.length, 0);
   assert.equal(playlists.PLtarget.items.length, 1);
+  assert.equal(mutationRequests.length, 2);
 });
 test('read-only diagnostics carry a selected video or durable saved probe without editing', async () => {
   reset();
@@ -133,7 +146,7 @@ test('post-add incomplete snapshot recovers without replaying the mutation', asy
   assert.equal(edits.length, 1);
   assert.equal(playlists.PLtarget.items.length, 1);
   assert.equal(playlists.WL.items.length, 1);
-  assert.equal(reads.filter(read => read.playlistId === 'PLtarget').length, 5);
+  assert.equal(reads.filter(read => read.playlistId === 'PLtarget').length, 3);
 });
 
 test('persistently incomplete source exhausts bounded reads and prevents removal', async () => {
@@ -176,6 +189,19 @@ test('remove requires editability and the exact reviewed occurrences', async () 
   assert.equal(result.ok, false);
   assert.match(result.error, /selection changed/);
   assert.equal(edits.length, 0);
+});
+
+test('fifty removals use one mutation request and one verification read', async () => {
+  reset();
+  playlists.WL.items = Array.from({ length: 50 }, (_, index) => ({
+    ...item, setVideoId: `set-${index}`, videoId: String(index).padStart(11, '0'), title: `Video ${index}`
+  }));
+  const result = await send({ type: 'REMOVE', playlistId: 'WL', keys: playlists.WL.items.map(entry => entry.setVideoId), expectedFingerprint: fingerprints });
+  assert.equal(result.ok, true);
+  assert.equal(playlists.WL.items.length, 0);
+  assert.equal(mutationRequests.length, 1);
+  assert.equal(mutationRequests[0].actions.length, 50);
+  assert.equal(reads.filter(read => read.playlistId === 'WL').length, 2);
 });
 
 
@@ -227,8 +253,8 @@ test('persistently incomplete post-add reads stop with one mutation and retained
   assert.equal(playlists.PLtarget.items.length, 1);
   assert.equal(playlists.WL.items.length, 1);
   assert.equal(data.activeJob.phase, 'interrupted');
-  assert.equal(data.activeJob.intent.kind, 'add');
-  assert.equal(reads.filter(read => read.playlistId === 'PLtarget').length, 5);
+  assert.equal(data.activeJob.intent.kind, 'add_batch');
+  assert.equal(reads.filter(read => read.playlistId === 'PLtarget').length, 4);
 });
 
 for (const identity of ['missing account', 'wrong playlist']) {
@@ -267,11 +293,64 @@ for (const identity of ['missing account', 'wrong playlist']) {
   const result = await send({ type: 'REMOVE', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints });
   assert.equal(result.ok, true); assert.equal(edits.length, 1); assert.equal(playlists.WL.items.length, 0);
  });
- for (const problem of ['wrong job', 'removal started', 'extra copies']) test(`copy recheck rejects ${problem}`, async () => {
+for (const problem of ['wrong job', 'removal started', 'batch removal started', 'extra copies']) test(`copy recheck rejects ${problem}`, async () => {
   reset(); pendingCopy('move'); playlists.PLtarget.items.push({ ...item, setVideoId: 'copy-one' });
   if (problem === 'removal started') data.activeJob.intent = { kind: 'remove', setVideoId: 'one' };
+  if (problem === 'batch removal started') data.activeJob.intent = { kind: 'remove_batch', setVideoIds: ['one'], batchSize: 1 };
   if (problem === 'extra copies') playlists.PLtarget.items.push({ ...item, setVideoId: 'copy-two' });
   const original = clone(data.activeJob);
   const result = await send({ type: 'CHECK_OPERATION', jobId: problem === 'wrong job' ? 'different' : 'pending' });
   assert.equal(result.ok, false); assert.deepEqual(data.activeJob, original); assert.equal(edits.length, 0);
  });
+
+test('finish move uses the current source snapshot and preserves newly added videos', async () => {
+  reset();
+  const copied = await send({ type: 'TRANSFER', kind: 'move', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+  assert.equal(copied.ok, true);
+  playlists.WL.items.unshift({ ...item, setVideoId: 'unrelated', videoId: 'lmnopqrstuv' });
+  const result = await send({ type: 'FINISH_MOVE', jobId: copied.job.id });
+  assert.equal(result.ok, true);
+  assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), ['unrelated']);
+  assert.equal(data.history[0].sourceBefore.items.length, 1);
+  assert.equal(data.history[0].removalBefore.items.length, 2);
+});
+
+for (const change of ['missing', 'replaced']) test(`finish move stops before mutation when a source occurrence is ${change}`, async () => {
+  reset();
+  const copied = await send({ type: 'TRANSFER', kind: 'move', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+  if (change === 'missing') playlists.WL.items = [];
+  else playlists.WL.items[0].videoId = 'lmnopqrstuv';
+  const result = await send({ type: 'FINISH_MOVE', jobId: copied.job.id });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /selection changed|source entry changed/);
+  assert.equal(mutationRequests.length, 1);
+  assert.equal(data.activeJob.removed.length, 0);
+});
+
+test('reorder selection uses one batch, keeps all occurrences, and archives the backup', async () => {
+  reset();
+  playlists.WL.items = ['first', 'second', 'third', 'fourth'].map(setVideoId => ({ ...item, setVideoId }));
+  const expectedOrder = playlists.WL.items.map(entry => entry.setVideoId);
+  const result = await send({ type: 'REORDER', playlistId: 'WL', keys: ['fourth', 'second'], expectedFingerprint: fingerprints, expectedOrder, position: 'top' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), ['second', 'fourth', 'first', 'third']);
+  assert.equal(mutationRequests.length, 1);
+  assert.equal(mutationRequests[0].actions.length, 2);
+  assert.equal(reads.length, 2);
+  assert.equal(data.activeJob, null);
+  assert.deepEqual(data.history[0].sourceBefore.items.map(entry => entry.setVideoId), expectedOrder);
+});
+
+for (const problem of ['stale order', 'not editable', 'cannot reorder', 'selected target', 'account']) test(`reorder rejects ${problem} before any request`, async () => {
+  reset(); playlists.WL.items.push({ ...item, setVideoId: 'two' });
+  const args = { type: 'REORDER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, expectedOrder: ['one', 'two'], position: 'bottom' };
+  if (problem === 'stale order') args.expectedOrder.reverse();
+  if (problem === 'not editable') playlists.WL.editable = false;
+  if (problem === 'cannot reorder') playlists.WL.canReorder = false;
+  if (problem === 'selected target') { args.position = 'before'; args.beforeId = 'one'; }
+  if (problem === 'account') args.expectedFingerprint = 'different';
+  const result = await send(args);
+  assert.equal(result.ok, false);
+  assert.equal(mutationRequests.length, 0);
+  assert.equal(data.activeJob, undefined);
+});

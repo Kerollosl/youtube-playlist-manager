@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "roboto",
+        "files": [
+          "src/content.js"
+        ],
+        "createdAt": "2026-10-09T19:14:36.950Z",
+        "reason": "Agent decision: DESIGN.md pins Roboto with Arial fallback so injected playlist controls match YouTube typography."
+      }
+    ]
+  }
+}

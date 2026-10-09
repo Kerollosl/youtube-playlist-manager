@@ -1,5 +1,5 @@
 import { youtubeCommand } from './youtube-api.js';
-import { assertAccount, assertComplete, exactItems, copyItems, removeItems, assertCopied, counts } from './operations.js';
+import { assertAccount, assertComplete, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, reorderItems } from './operations.js';
 
 let busy = false;
 let lastEditAt = 0;
@@ -98,7 +98,7 @@ async function run(message) {
     if (message.type === 'CHECK_OPERATION') {
       if (!activeJob || !['copy', 'move'].includes(activeJob.kind)) throw new Error('There is no saved copy or move to check.');
       if (message.jobId && message.jobId !== activeJob.id) throw new Error('The saved operation changed.');
-      if (activeJob.removed?.length || activeJob.intent?.kind === 'remove') throw new Error('Removal already started. Review the saved operation.');
+      if (activeJob.removed?.length || ['remove', 'remove_batch'].includes(activeJob.intent?.kind)) throw new Error('Removal already started. Review the saved operation.');
       const destination = await read(message.tabId, activeJob.targetId, activeJob.items[0]?.videoId, activeJob.fingerprint);
       assertCopied(activeJob, destination);
       const actual = counts(destination.items), baseline = counts(activeJob.targetBefore.items), added = counts(activeJob.items);
@@ -123,7 +123,7 @@ async function run(message) {
       if (!source.editable) throw new Error('The source playlist is not editable.');
       job.phase = 'removing';
       await save(job);
-      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId), destination, source);
       job.phase = 'completed';
       await archive(job);
       return { job };
@@ -132,12 +132,12 @@ async function run(message) {
     // independently reviewed delete starts; never bypass an unfinished move.
     const archiveStoppedCopy = message.type === 'REMOVE' && activeJob?.kind === 'copy' && activeJob.phase === 'interrupted';
     if (activeJob && !archiveStoppedCopy) throw new Error('Review or stop the saved operation before starting another.');
-    if (!['PASTE', 'TRANSFER', 'REMOVE', 'SORT'].includes(message.type)) throw new Error('Unsupported command.');
+    if (!['PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'].includes(message.type)) throw new Error('Unsupported command.');
     const pasted = message.type === 'PASTE';
     if (pasted && !queue) throw new Error('Copy or cut videos first.');
     if (pasted && message.expectedQueueId !== queue.id) throw new Error('The saved selection changed. Review Paste again.');
     const sourceId = pasted ? queue.sourceId : message.playlistId;
-    const kind = message.type === 'REMOVE' ? 'remove' : message.type === 'SORT' ? 'sort' : pasted ? queue.kind : message.kind === 'move' ? 'move' : 'copy';
+    const kind = message.type === 'REMOVE' ? 'remove' : message.type === 'SORT' ? 'sort' : message.type === 'REORDER' ? 'reorder' : pasted ? queue.kind : message.kind === 'move' ? 'move' : 'copy';
     let source = null;
     let items;
     let fingerprint;
@@ -152,9 +152,14 @@ async function run(message) {
       fingerprint = source.fingerprint;
       items = exactItems(pasted ? queue.items.map(item => item.setVideoId) : message.keys, source);
       if (pasted && items.some((item, i) => item.videoId !== queue.items[i].videoId)) throw new Error('Saved source videos changed.');
-      if (['move', 'remove', 'sort'].includes(kind) && !source.editable) throw new Error('The source playlist is not editable.');
+      if (['move', 'remove', 'sort', 'reorder'].includes(kind) && !source.editable) throw new Error('The source playlist is not editable.');
       if (kind === 'sort' && items.length !== source.items.length) throw new Error('The playlist changed since the sort was reviewed. Refresh and try again.');
-      if (kind === 'sort' && !source.canReorder) throw new Error('YouTube does not allow this playlist to be reordered.');
+      if (['sort', 'reorder'].includes(kind) && !source.canReorder) throw new Error('YouTube does not allow this playlist to be reordered.');
+    }
+    let placement;
+    if (kind === 'reorder') {
+      if (JSON.stringify(message.expectedOrder) !== JSON.stringify(source.items.map(item => item.setVideoId))) throw new Error('The playlist order changed. Refresh and choose the position again.');
+      placement = reorderPlan(source, message.keys, message.position, message.beforeId);
     }
     if (archiveStoppedCopy) await archive({ ...activeJob, phase: 'stopped' });
     job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now() };
@@ -174,6 +179,12 @@ async function run(message) {
       job.phase = 'removing';
       await save(job);
       await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      job.phase = 'completed';
+      await archive(job);
+    } else if (kind === 'reorder') {
+      job.phase = 'reordering';
+      await save(job);
+      await reorderItems(job, placement, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
       job.phase = 'completed';
       await archive(job);
     } else {
@@ -222,6 +233,7 @@ function makeIO(tabId, expectedFingerprint, pickerVideoId) {
   return {
     read: playlistId => read(tabId, playlistId, pickerVideoId, expectedFingerprint),
     edit: (playlistId, action) => api(tabId, { type: 'edit', playlistId, action, expectedFingerprint }),
+    editBatch: (playlistId, actions) => api(tabId, { type: 'edit', playlistId, actions, expectedFingerprint }),
     save,
   };
 }
@@ -233,7 +245,7 @@ chrome.action.onClicked.addListener(tab => {
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.tab || !sender.url?.startsWith('https://www.youtube.com/')) return;
   // Sender identity determines the tab; webpage data cannot redirect an operation.
-  const allowed = ['READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT'];
+  const allowed = ['READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'];
   if (!message || !allowed.includes(message.type)) { respond({ ok: false, error: 'Unsupported action.' }); return; }
   run({ ...message, tabId: sender.tab.id }).then(result => respond({ ...result, ok: true })).catch(error => respond({ ok: false, error: error.message, jobId: error.jobId }));
   return true;

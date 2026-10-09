@@ -21,17 +21,19 @@ The content script host sits outside `ytd-app`; it explicitly mirrors the docume
 
 ## Layout and hierarchy
 
-A 56px floating bottom toolbar sits 20px from the desktop edge and 12px on narrow viewports. It contains the selection count, Copy links, Select all, Deselect all, More, and Close. The menu contains Cut, Copy, Save to playlist, Copy links, and Delete selected. Save stays in the menu.
+A 56px floating bottom toolbar sits 20px from the desktop edge and 12px on narrow viewports. It contains the selection or queued-operation count, Copy links, Select all, Deselect all, More, and Close. The grouped menu separates Selection, Organize, and Safety & recovery actions. Save stays in the menu; destructive actions include explanatory copy and reviewed titles.
 
 While selection mode is enabled, clicking anywhere in a video card selects or deselects it instead of opening the video. The native card layout stays in place. Selected cards use a solid blue surface and a 44px blue corner checkmark. Keyboard users can toggle the same selection through a focusable checkbox, with a visible card focus outline. Shift-click selects or clears a range.
 
-Toasts are capped at 420px and use brief status copy. Errors expose Details, which preserves the full message and links to the reader check. Reader JSON remains in a collapsed technical disclosure. Dialogs use a native surface, 20px title, close control, labeled 44px inputs, slim scrollable lists, and separated action footer.
+Toasts are capped at 460px and use brief status copy. Errors expose Details, which preserves the full message and links to the reader check. Reader JSON remains in a collapsed technical disclosure. Dialogs use a native surface, 20px title, close control, labeled 44px inputs, slim scrollable lists, and separated action footer.
 
-At 560px and below, the count denominator and Copy links text hide while full accessible labels remain. The toolbar retains 44px hit targets and fits 375px. Dialogs fit the viewport with 12px outer inset. At 340px and below, Copy links is available from More while Select all and Deselect all remain directly accessible.
+At 560px and below, the count denominator and Copy links text hide while full accessible labels remain. The toolbar retains 44px hit targets and fits 375px. Dialogs fit the viewport with 12px outer inset. At 340px and below, Copy links, Select all, and Deselect all move into More so count, More, and Close remain usable at high zoom.
+
+Move in this playlist opens a compact panel with top, bottom, drag guidance, and numbered placement. Selected playlist rows use a grab cursor when ordering is available. Dragging above or below an unselected row shows a blue insertion line; dropping moves the selected group in its existing playlist order. Viewport edges scroll during dragging. Numbered placement provides a keyboard alternative. Selection-off removes all injected row controls and classes and restores original draggable attributes, leaving native row positioning and interactions intact.
 
 ## Interaction
 
-All interactive controls have visible focus and hover states. More supports Arrow Up/Down, Home, End, and Escape. Dialogs trap focus and restore it on close; Escape closes the dialog. Async operation state disables affected controls. Reduced-motion disables color transitions. Errors persist until another status supersedes them or the user opens their details.
+All interactive controls have visible focus and hover states. More supports Arrow Up/Down, Home, End, and Escape. Full dialogs trap focus and restore it on close; compact anchored panels use nonmodal region semantics. Async operation state disables affected controls and shows a slim busy indicator. Reduced-motion disables color transitions and indeterminate motion. Errors persist until another status supersedes them or the user opens their details.
 
 ## Data boundaries
 

@@ -14,7 +14,7 @@ export async function youtubeCommand(command) {
   const occurrenceId = value => typeof value === 'string' && value.length > 0
     && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value);
   const commandSchemas = {
-    read: ['type', 'playlistId', 'pickerVideoId'], edit: ['type', 'playlistId', 'action', 'expectedFingerprint'],
+    read: ['type', 'playlistId', 'pickerVideoId'], edit: ['type', 'playlistId', 'action', 'actions', 'expectedFingerprint'],
     playlists: ['type', 'videoId'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
   };
   if (!Object.hasOwn(commandSchemas, command?.type) || !ownKeys(command, commandSchemas[command.type])) {
@@ -31,21 +31,29 @@ export async function youtubeCommand(command) {
     throw new Error('Invalid playlist picker video ID.');
   }
   if (command.type === 'edit') {
-    const action = command.action;
+    const actions = command.actions || (command.action ? [command.action] : []);
     const schemas = {
       ACTION_ADD_VIDEO: ['action', 'addedVideoId'],
       ACTION_REMOVE_VIDEO: ['action', 'setVideoId'],
       ACTION_MOVE_VIDEO_AFTER: ['action', 'setVideoId', 'movedSetVideoIdPredecessor']
     };
-    if (!Object.hasOwn(schemas, action?.action) || !ownKeys(action, schemas[action.action])) {
+    if (!Array.isArray(actions) || !actions.length || actions.length > 50) {
+      throw new Error('Provide between 1 and 50 playlist actions.');
+    }
+    for (const action of actions) {
+      if (!Object.hasOwn(schemas, action?.action) || !ownKeys(action, schemas[action.action])) {
+        throw new Error('This playlist action is not permitted.');
+      }
+      if (action.action === 'ACTION_ADD_VIDEO' ? !videoId(action.addedVideoId) : !occurrenceId(action.setVideoId)) {
+        throw new Error('The action needs an exact video or playlist occurrence ID.');
+      }
+      if (action.action === 'ACTION_MOVE_VIDEO_AFTER' && action.movedSetVideoIdPredecessor !== undefined
+        && (!occurrenceId(action.movedSetVideoIdPredecessor) || action.setVideoId === action.movedSetVideoIdPredecessor)) {
+        throw new Error('The reorder predecessor is invalid.');
+      }
+    }
+    if (command.action && command.actions) {
       throw new Error('This playlist action is not permitted.');
-    }
-    if (action.action === 'ACTION_ADD_VIDEO' ? !videoId(action.addedVideoId) : !occurrenceId(action.setVideoId)) {
-      throw new Error('The action needs an exact video or playlist occurrence ID.');
-    }
-    if (action.action === 'ACTION_MOVE_VIDEO_AFTER' && action.movedSetVideoIdPredecessor !== undefined
-      && (!occurrenceId(action.movedSetVideoIdPredecessor) || action.setVideoId === action.movedSetVideoIdPredecessor)) {
-      throw new Error('The reorder predecessor is invalid.');
     }
   } else if (command.type === 'playlists') {
     if (command.videoId !== undefined && !videoId(command.videoId)) throw new Error('Invalid video ID.');
@@ -159,7 +167,8 @@ export async function youtubeCommand(command) {
   }
 
   if (command.type === 'edit') {
-    const data = await request('browse/edit_playlist', { playlistId: command.playlistId, actions: [command.action] }, true);
+    const actions = command.actions || [command.action];
+    const data = await request('browse/edit_playlist', { playlistId: command.playlistId, actions }, true);
     if (data.status !== 'STATUS_SUCCEEDED') {
       throw new Error('YouTube did not confirm the action; outcome is unknown. Refresh before retrying.');
     }
