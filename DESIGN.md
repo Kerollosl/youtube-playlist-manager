@@ -1,40 +1,27 @@
 # Integrated YouTube selection controls
 
-## Direction
+## Direction and themes
 
-YouTube's incumbent visual world is pinned. Use Roboto with Arial fallback, neutral native surfaces, a single YouTube blue action accent, consistent 20px SVG icons, and clear blue selected card surfaces. Do not introduce an independent dashboard, brand system, decorative motion, or oversized status panels.
+YouTube remains the visual authority. Use Roboto, native neutral surfaces, 20px SVG icons, restrained selection highlights, and blue focus and insertion indicators. The shadow host lives inside `ytd-app` when available, inherits native theme variables, and mirrors the root dark attribute for fallbacks. No standalone application or separate brand surface.
 
-## Themes
+## Layout
 
-The content script host sits outside `ytd-app`; it explicitly mirrors the document root's `dark` attribute. Shadow controls use local tokens rather than assuming inherited YouTube theme variables.
+A 52px selection bar sits immediately below the masthead. Close, a mixed-state Select all checkbox, and the count sit at the start; Save, Copy links, and More sit at the end. A removable 52px spacer preserves the page’s content space. Masthead resize and viewport changes update the bar’s position.
 
-| Token | Light | Dark |
-| --- | --- | --- |
-| Surface | #ffffff | #212121 |
-| Text | #0f0f0f | #f1f1f1 |
-| Secondary text | #606060 | #b6b6b6 |
-| Border | #e0e0e0 | #464646 |
-| Hover | #f2f2f2 | #383838 |
-| Primary action | #065fd4 | #3ea6ff |
-| Primary action text | #ffffff | #0f0f0f |
-| Error text | #b3261e | #ffb4ab |
+Save opens a compact searchable playlist picker beneath the toolbar. More groups selection, organization, and recovery commands. Sorting has labeled title/channel/duration and direction controls. Move and delete retain compact reviews; deletion lists affected titles and explains the saved backup.
 
-## Layout and hierarchy
+At 600px and below, Save and Copy links become labeled icon buttons and the count denominator hides. Below 340px, Copy links remains available in More. Controls retain 44px touch targets. Menus and panels fit the viewport and scroll within its remaining height.
 
-A 56px floating bottom toolbar sits 20px from the desktop edge and 12px on narrow viewports. It contains the selection or queued-operation count, Copy links, Select all, Deselect all, More, and Close. The grouped menu separates Selection, Organize, and Safety & recovery actions. Save stays in the menu; destructive actions include explanatory copy and reviewed titles.
+Selected cards keep YouTube’s layout and use its ten-percent neutral layer. Leading checkboxes replace playlist index numbers while selection is active; grid checkboxes sit at the thumbnail’s upper start edge. Checkboxes have 20px artwork inside a 44px hit area. Switching selection off removes injected controls, restores native row attributes and indexes, and removes the spacer.
 
-While selection mode is enabled, clicking anywhere in a video card selects or deselects it instead of opening the video. The native card layout stays in place. Selected cards use a solid blue surface and a 44px blue corner checkmark. Keyboard users can toggle the same selection through a focusable checkbox, with a visible card focus outline. Shift-click selects or clears a range.
+## Interaction and feedback
 
-Toasts are capped at 460px and use brief status copy. Errors expose Details, which preserves the full message and links to the reader check. Reader JSON remains in a collapsed technical disclosure. Dialogs use a native surface, 20px title, close control, labeled 44px inputs, slim scrollable lists, and separated action footer.
+Full-card click and Shift-click range selection remain available. The master checkbox represents none, some, or all videos selected. More supports Arrow Up/Down, Home, End, and Escape. Dialogs trap keyboard focus and restore it on close; anchored panels use nonmodal region semantics. All controls retain visible focus states.
 
-At 560px and below, the count denominator and Copy links text hide while full accessible labels remain. The toolbar retains 44px hit targets and fits 375px. Dialogs fit the viewport with 12px outer inset. At 340px and below, Copy links, Select all, and Deselect all move into More so count, More, and Close remain usable at high zoom.
+Operations show verified progress in the selection bar with a slim progress indicator. Checkpoint notifications update this inline status rather than producing repeated toasts. Reduced motion disables indicator animation. Completion notices are brief; errors retain a Details action and collapsed technical diagnostics.
 
-Move in this playlist opens a compact panel with top, bottom, drag guidance, and numbered placement. Selected playlist rows use a grab cursor when ordering is available. Dragging above or below an unselected row shows a blue insertion line; dropping moves the selected group in its existing playlist order. Viewport edges scroll during dragging. Numbered placement provides a keyboard alternative. Selection-off removes all injected row controls and classes and restores original draggable attributes, leaving native row positioning and interactions intact.
-
-## Interaction
-
-All interactive controls have visible focus and hover states. More supports Arrow Up/Down, Home, End, and Escape. Full dialogs trap focus and restore it on close; compact anchored panels use nonmodal region semantics. Async operation state disables affected controls and shows a slim busy indicator. Reduced-motion disables color transitions and indeterminate motion. Errors persist until another status supersedes them or the user opens their details.
+Group dragging moves exact selected occurrences in their existing order, with a thin native blue insertion line. Numbered placement is the keyboard alternative. Only rendered rows on the active page participate in inline selection; a complete snapshot supplies the total count and mutation identities. Snapshot indexes avoid repeated full-playlist scans.
 
 ## Data boundaries
 
-Only rendered rows in the current page container participate in inline selection. Playlist pages use playlist video rows, excluding watch panels and stale pages. A verified complete snapshot supplies the total denominator. Selection and mutation safeguards remain in the existing adapter/worker flow.
+UI optimization does not weaken the worker’s account binding, completeness checks, exact occurrence IDs, durable mutation journal, or destination-before-removal checks. Routine status omits immutable snapshots and history records; detailed recovery explicitly loads complete backups. Sorting and group reordering use the minimum entry moves and verifies full order and membership after each bounded batch. Unknown mutation outcomes are never automatically replayed.

@@ -11,7 +11,8 @@ const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
 window.chrome = {
   runtime: {
-    getManifest: () => ({ version: '1.4.0' }),
+    getURL: path => new URL('../' + path, location.href).href,
+    getManifest: () => ({ version: '1.5.0' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
       if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
@@ -30,6 +31,11 @@ window.chrome = {
         return { ok: true, job };
       }
       if (message.type === 'PLAYLISTS') return { ok: true, playlists: [{ playlistId: 'PLdemo', title: 'Research notes' }] };
+      if (message.type === 'SORT') {
+        fixtureItems.sort((a, b) => (message.descending ? -1 : 1) * (message.sortBy === 'duration' ? a.durationSeconds - b.durationSeconds : a[message.sortBy].localeCompare(b[message.sortBy])));
+        sessionStorage.setItem('fixture-order', JSON.stringify(fixtureItems.map(item => item.setVideoId)));
+        return { ok: true, job: { kind: 'sort', phase: 'completed', sourceId: 'WL' } };
+      }
       if (message.type === 'REORDER') {
         const selected = new Set(message.keys), moving = fixtureItems.filter(item => selected.has(item.setVideoId)), remaining = fixtureItems.filter(item => !selected.has(item.setVideoId));
         const index = message.position === 'top' ? 0 : message.position === 'bottom' ? remaining.length : remaining.findIndex(item => item.setVideoId === message.beforeId);

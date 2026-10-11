@@ -4,7 +4,7 @@ export const counts = items => items.reduce((out, item) => {
   out[item.videoId] = (out[item.videoId] || 0) + 1;
   return out;
 }, Object.create(null));
-const BATCH_SIZE = 50;
+export const BATCH_SIZE = 50;
 const chunks = items => Array.from({ length: Math.ceil(items.length / BATCH_SIZE) }, (_, index) => items.slice(index * BATCH_SIZE, (index + 1) * BATCH_SIZE));
 const wait = (io, ms) => (io.wait || (delay => new Promise(resolve => setTimeout(resolve, delay))))(ms);
 async function editBatch(io, playlistId, actions) {
@@ -64,25 +64,42 @@ export function reorderPlan(snapshot, keys, position, beforeId) {
     if (index < 0) throw new Error('Choose an unselected video as the placement target.');
   } else throw new Error('Choose top, bottom, or a playlist position.');
   const desired = [...remaining.slice(0, index), ...moving, ...remaining.slice(index)];
-  const current = snapshot.items.map(item => item.setVideoId), actions = [];
-  let predecessor = remaining[index - 1]?.setVideoId;
-  for (const item of moving) {
-    const from = current.indexOf(item.setVideoId);
-    if ((from === 0 ? undefined : current[from - 1]) !== predecessor) {
-      actions.push({ action: 'ACTION_MOVE_VIDEO_AFTER', setVideoId: item.setVideoId,
-        ...(predecessor ? { movedSetVideoIdPredecessor: predecessor } : {}) });
-      current.splice(from, 1);
-      current.splice(predecessor ? current.indexOf(predecessor) + 1 : 0, 0, item.setVideoId);
+  return orderPlan(snapshot, desired.map(item => item.setVideoId));
+}
+
+// Preserve a longest ordered subsequence: every other occurrence moves once.
+// This is the minimum number of single-entry moves for an exact permutation.
+export function orderPlan(snapshot, desiredIds) {
+  assertComplete(snapshot);
+  const positions = new Map(snapshot.items.map((item, index) => [item.setVideoId, index]));
+  if (!Array.isArray(desiredIds) || desiredIds.length !== positions.size || new Set(desiredIds).size !== positions.size || desiredIds.some(id => !positions.has(id))) throw new Error('The desired order must contain every playlist occurrence exactly once.');
+  const tails = [], previous = new Int32Array(desiredIds.length).fill(-1);
+  for (let i = 0; i < desiredIds.length; i++) {
+    const position = positions.get(desiredIds[i]);
+    let low = 0, high = tails.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (positions.get(desiredIds[tails[middle]]) < position) low = middle + 1;
+      else high = middle;
     }
-    predecessor = item.setVideoId;
+    if (low) previous[i] = tails[low - 1];
+    tails[low] = i;
   }
-  return { actions, desiredIds: desired.map(item => item.setVideoId) };
+  const keep = new Set();
+  for (let i = tails.at(-1) ?? -1; i >= 0; i = previous[i]) keep.add(desiredIds[i]);
+  const actions = [];
+  desiredIds.forEach((id, index) => {
+    if (!keep.has(id)) actions.push({ action: 'ACTION_MOVE_VIDEO_AFTER', setVideoId: id,
+      ...(index ? { movedSetVideoIdPredecessor: desiredIds[index - 1] } : {}) });
+  });
+  return { actions, desiredIds: [...desiredIds] };
 }
 
 export async function reorderItems(job, plan, io) {
   let current = job.sourceBefore.items.map(item => item.setVideoId);
   const videos = new Map(job.sourceBefore.items.map(item => [item.setVideoId, item.videoId]));
   job.reordered = [];
+  job.plannedMoves = plan.actions.length;
   job.desiredIds = plan.desiredIds;
   for (const batch of chunks(plan.actions)) {
     const expected = [...current];

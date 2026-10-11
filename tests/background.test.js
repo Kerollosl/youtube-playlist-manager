@@ -354,3 +354,43 @@ for (const problem of ['stale order', 'not editable', 'cannot reorder', 'selecte
   assert.equal(mutationRequests.length, 0);
   assert.equal(data.activeJob, undefined);
 });
+
+test('sort batches a reverse playlist and keeps every duplicate occurrence', async () => {
+  reset();
+  playlists.WL.items = Array.from({ length: 101 }, (_, index) => ({ ...item, setVideoId: `entry-${index}`, title: String(100 - index).padStart(3, '0') }));
+  const keys = playlists.WL.items.map(entry => entry.setVideoId);
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys, expectedFingerprint: fingerprints, sortBy: 'title' });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), [...keys].reverse());
+  assert.deepEqual(mutationRequests.map(request => request.actions.length), [50, 50]);
+  assert.equal(reads.length, 3); // fresh source + one exact verification per batch
+  assert.equal(data.history[0].sourceBefore.items.length, 101);
+  assert.equal(data.history[0].phase, 'completed');
+});
+test('already sorted playlist completes without mutation or redundant reread', async () => {
+  reset();
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, sortBy: 'title' });
+  assert.equal(result.ok, true, result.error); assert.equal(edits.length, 0); assert.equal(reads.length, 1);
+});
+test('routine status omits immutable backups; detailed recovery keeps their exact contents', async () => {
+  reset();
+  const backup = { ...playlists.WL, items: Array.from({ length: 1000 }, (_, i) => ({ ...item, setVideoId: `entry-${i}` })) };
+  data.activeJob = { id: 'saved', kind: 'copy', phase: 'interrupted', items: [item], sourceBefore: backup, targetBefore: backup, desiredIds: backup.items.map(entry => entry.setVideoId) };
+  data.queue = { items: [item], sourceBefore: backup };
+  data.history = Array.from({ length: 10 }, () => clone(data.activeJob)); data.historyCount = 10;
+  const compact = await send({ type: 'STATUS' }), full = await send({ type: 'STATUS', detailed: true });
+  assert.equal(compact.historyCount, 10); assert.equal(compact.history, undefined);
+  assert.equal(compact.activeJob.sourceBefore.items, undefined);
+  assert.equal(compact.queue.items.length, 1);
+  assert.deepEqual(full.activeJob.sourceBefore, backup);
+  assert.deepEqual(full.history[0].targetBefore, backup);
+  assert.ok(JSON.stringify(compact).length < JSON.stringify(full).length / 100);
+  assert.deepEqual(data.activeJob.sourceBefore, backup);
+});
+test('natural descending sort preserves the source order of equal titles', async () => {
+  reset();
+  playlists.WL.items = ['Episode 2', 'episode 2', 'Episode 10', 'Episode 1'].map((title, index) => ({ ...item, title, setVideoId: `entry-${index}` }));
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys: playlists.WL.items.map(entry => entry.setVideoId), expectedFingerprint: fingerprints, sortBy: 'title', descending: true });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), ['entry-2', 'entry-0', 'entry-1', 'entry-3']);
+});

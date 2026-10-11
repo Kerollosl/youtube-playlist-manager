@@ -70,12 +70,22 @@ test('invalid, selected, stale, or incomplete targets fail before edits', () => 
   assert.throws(() => reorderPlan({ ...initial, complete: false }, ['b'], 'top'), /fully read/);
 });
 
-test('more than fifty moves use bounded batches with exact verification', async () => {
+test('moving almost every entry uses one boundary move', async () => {
   const initial = source([entry('anchor'), ...Array.from({ length: 51 }, (_, index) => entry(`entry-${index}`))]);
   const plan = reorderPlan(initial, initial.items.slice(1).map(item => item.setVideoId), 'top'), io = memoryIO(initial), op = job(initial);
   await reorderItems(op, plan, io);
-  assert.deepEqual(io.calls.map(actions => actions.length), [50, 1]);
+  assert.deepEqual(io.calls.map(actions => actions.length), [1]);
   assert.deepEqual(ids(io.state), [...initial.items.slice(1).map(item => item.setVideoId), 'anchor']);
+  assert.equal(op.reordered.length, 1);
+});
+
+test('interleaved selection requiring more than fifty moves uses verified bounded batches', async () => {
+  const entries = Array.from({ length: 51 }, (_, index) => [entry(`anchor-${index}`), entry(`selected-${index}`)]).flat();
+  const initial = source(entries), keys = entries.filter((_, index) => index % 2).map(item => item.setVideoId);
+  const plan = reorderPlan(initial, keys, 'top'), io = memoryIO(initial), op = job(initial);
+  await reorderItems(op, plan, io);
+  assert.deepEqual(io.calls.map(actions => actions.length), [50, 1]);
+  assert.deepEqual(ids(io.state), [...keys, ...entries.filter((_, index) => !(index % 2)).map(item => item.setVideoId)]);
   assert.equal(op.reordered.length, 51);
 });
 

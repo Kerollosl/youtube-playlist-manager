@@ -5,37 +5,24 @@
   const host = document.createElement('div');
   host.id = 'yt-multiselect-tools';
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<style>
-    :host{font-family:Roboto,Arial,sans-serif;font-size:14px;line-height:1.5;color:var(--text);--surface:#fff;--text:#0f0f0f;--line:#e0e0e0;--hover:#f2f2f2;--muted:#606060;--blue:#065fd4;--primary-text:#fff;--danger:#b3261e;--selection:#d9e8fc;color-scheme:light;--toolbar-z:2200;--notice-z:2201;--dialog-z:2300}
-    :host([data-theme=dark]){--surface:#212121;--text:#f1f1f1;--line:#464646;--hover:#383838;--muted:#b6b6b6;--blue:#3ea6ff;--primary-text:#0f0f0f;--danger:#ffb4ab;--selection:#173d5c;color-scheme:dark}
-    *{box-sizing:border-box}[hidden]{display:none!important}::selection{background:var(--selection)}button,input,select,textarea{font:inherit;caret-color:var(--blue)}button{min-height:44px;border:0;background:transparent;color:inherit;cursor:pointer;transition:background-color 160ms,color 160ms}button:disabled{opacity:.45;cursor:default}button:hover:not(:disabled){background:var(--hover)}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--blue);outline-offset:2px}button svg{width:20px;height:20px;fill:currentColor;flex-shrink:0}.icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border-radius:50%;flex-shrink:0;position:relative}.icon.has-status::after{content:"";position:absolute;right:5px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--blue);box-shadow:0 0 0 2px var(--surface)}.text{border-radius:22px;padding:10px 16px;font-weight:500}.primary{background:var(--blue);color:var(--primary-text)}.primary:hover:not(:disabled){filter:brightness(.92);background:var(--blue)}.danger{color:var(--danger)}
-    .bar{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:var(--toolbar-z);display:flex;align-items:center;gap:4px;height:56px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:6px;box-shadow:0 6px 24px #0004;max-width:calc(100vw - 24px);white-space:nowrap;overflow:visible}.bar[aria-busy=true]::before{content:"";position:absolute;top:-1px;left:14px;width:32%;height:2px;border-radius:2px;background:var(--blue);animation:working 1.1s ease-in-out infinite}.count{padding:0 12px;font-weight:500;min-width:116px;font-variant-numeric:tabular-nums}.count small{color:var(--muted);font-size:inherit;font-weight:400}.divider{width:1px;height:24px;background:var(--line);margin:0 4px}.copy,.save{display:flex;align-items:center;justify-content:center;gap:8px}.save{color:var(--blue)}.menu{position:absolute;bottom:calc(100% + 10px);right:0;width:264px;max-width:calc(100vw - 24px);max-height:min(76vh,560px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px 0;box-shadow:0 8px 28px #0005}.menu button{display:flex;align-items:center;gap:13px;width:100%;text-align:left;padding:6px 16px;border-radius:0;font-weight:400;min-height:44px}.menu button>svg{width:20px;height:20px}.menu-copy{display:flex;min-width:0}.menu-copy strong{font-weight:500;line-height:1.3;overflow:hidden;text-overflow:ellipsis}.menu-label{display:block;padding:9px 16px 3px;font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.05em}.menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}.menu .compact-only{display:none}.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:var(--notice-z);border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 4px 18px #0004;padding:8px 12px 8px 16px;max-width:min(460px,calc(100vw - 24px));display:flex;gap:8px;align-items:center;white-space:normal}.toast[data-tone=error]{border-color:color-mix(in srgb,var(--danger) 48%,var(--line))}.toast-message{flex:1;min-width:0;line-height:1.45}.toast button{color:var(--blue);flex-shrink:0;padding:8px 12px}
-    .backdrop{position:fixed;inset:0;z-index:var(--dialog-z);background:#0009;display:flex;align-items:center;justify-content:center;padding:20px}.dialog{background:var(--surface);border-radius:16px;width:480px;max-width:100%;max-height:85vh;overflow:auto;box-shadow:0 8px 32px #0005;padding:0 24px 20px;overflow-wrap:anywhere}.dialog-header{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 0;margin-bottom:4px;position:sticky;top:0;background:var(--surface);z-index:1}.dialog h2{font-size:20px;line-height:1.3;margin:0;font-weight:500}.dialog p{line-height:1.5;margin:12px 0;color:var(--muted)}.dialog label{display:block;margin:18px 0 6px;font-weight:500}.dialog input:not([type=checkbox]),.dialog select,.dialog textarea{width:100%;min-height:44px;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:transparent;color:inherit}.dialog input::placeholder{color:var(--muted)}.dialog select option{background:var(--surface);color:var(--text)}.dialog textarea{min-height:160px;resize:vertical;line-height:1.5}.footer{display:flex;gap:8px;justify-content:flex-end;margin-top:24px;padding-top:12px;border-top:1px solid var(--line);flex-wrap:wrap}.videos{max-height:168px;overflow:auto;margin:16px 0 0;padding:0;list-style:none;font-size:14px;border-top:1px solid var(--line)}.videos li{padding:9px 0;border-bottom:1px solid var(--line);line-height:1.4}.saved{padding:16px 0;border-bottom:1px solid var(--line)}.saved strong{font-weight:500}.saved small{display:block;color:var(--muted);margin:5px 0}.saved-actions{display:flex;gap:4px;flex-wrap:wrap}.error{color:var(--danger)!important}.note{font-size:13px}.checklabel{display:flex!important;gap:8px;align-items:center;min-height:44px}.checklabel input{accent-color:var(--blue);width:20px;height:20px}.diagnostics{margin-top:16px}.diagnostics summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--blue);font-weight:500}.diagnostics textarea{font:12px/1.5 monospace;max-height:240px}.error-copy{white-space:pre-wrap}
-    .panel{position:absolute;bottom:calc(100% + 10px);right:0;width:320px;max-width:calc(100vw - 24px);max-height:65vh;overflow:auto;background:var(--surface);border-radius:12px;padding:12px;box-shadow:0 4px 24px #0005;white-space:normal}.panel h2{font-size:16px;margin:0;font-weight:500}.panel .dialog-header{padding:0;margin:0}.panel p{color:var(--muted);margin:8px 4px}.panel input{width:100%;min-height:44px;padding:10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}.panel .choices{max-height:230px;overflow:auto;margin-top:8px}.panel .choices button{display:block;text-align:left;width:100%;border-radius:8px;padding:10px 12px}.panel .footer{margin-top:12px;padding-top:8px}.panel summary{cursor:pointer;padding:10px 4px;color:var(--muted)}
-    :host([data-menu-open]) .toast,:host([data-panel-open]) .toast{visibility:hidden}
-    @media(max-width:560px){.bar{bottom:12px;gap:0;max-width:calc(100vw - 16px);padding:6px 4px}.count{min-width:0;padding:0 8px;font-size:13px}.count small{display:none}.divider{margin:0 2px}.copy{width:44px;height:44px;padding:0;gap:0}.copy span{display:none}.dialog{padding:0 20px 16px}.backdrop{padding:12px}.toast{bottom:78px;font-size:14px}.dialog-header{padding:10px 0}.footer{gap:4px}.menu{right:0}}
-    @media(max-width:340px){.bar .copy,.bar [data-action=all],.bar [data-action=clear],.bar .divider{display:none}.count{padding:0 8px;font-size:12px}.menu .compact-only{display:flex}.menu span.compact-only{display:block}.menu,.panel{left:50%;right:auto;width:calc(100vw - 16px);max-width:none;transform:translateX(-50%);max-height:calc(100vh - 96px)}}
-    @keyframes working{0%{transform:translateX(0)}50%{transform:translateX(170%)}100%{transform:translateX(0)}}
-    @media(prefers-reduced-motion:reduce){button{transition:none}.bar[aria-busy=true]::before{animation:none;left:34%;width:32%}}
-  </style>
+  root.innerHTML = `<link rel="stylesheet" href="${chrome.runtime.getURL('src/ui.css')}">
   <div class="bar" role="toolbar" aria-label="Selected videos" aria-busy="false" hidden>
-    <span class="count" aria-live="polite">0 selected</span><span class="divider" aria-hidden="true"></span>
-    <button class="text copy primary" data-action="links" title="Copy selected video links as plain text" aria-label="Copy links">${svg('link')}<span>Copy links</span></button>
-    <button class="icon" data-action="all" title="Select all" aria-label="Select all">${svg('all')}</button>
-    <button class="icon" data-action="clear" title="Deselect all" aria-label="Deselect all">${svg('clear')}</button>
-    <button class="icon" data-action="menu" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">${svg('more')}</button>
     <button class="icon" data-action="close" title="Close selection" aria-label="Close selection">${svg('close')}</button>
+    <button class="icon" data-action="all" role="checkbox" aria-checked="false" title="Select all" aria-label="Select all">${svg('clear')}</button>
+    <span class="count" aria-live="polite">0 selected</span>
+    <div class="toolbar-actions">
+      <button class="text save primary" data-action="save" title="Save to playlist" aria-label="Save to playlist">${svg('save')}<span>Save</span></button>
+      <button class="text copy" data-action="links" title="Copy selected video links as plain text" aria-label="Copy links">${svg('link')}<span>Copy links</span></button>
+      <button class="icon" data-action="menu" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">${svg('more')}</button>
+    </div>
+    <div class="progress" hidden aria-hidden="true"><span></span></div>
     <div class="menu" role="menu" aria-label="Selection actions" hidden></div>
     <div class="panel" hidden></div>
   </div><div class="toast" role="status" hidden></div><div class="backdrop" hidden></div>`;
-  document.documentElement.append(host);
+  (document.querySelector('ytd-app') || document.documentElement).append(host);
   function syncTheme() { host.dataset.theme = document.documentElement.hasAttribute('dark') ? 'dark' : 'light'; }
   syncTheme();
   new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['dark'] });
-  const pageStyle = document.createElement('style');
-  pageStyle.textContent = `#yt-multiselect-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 44px;width:44px;height:44px;margin:0 4px;border:0;border-radius:50%;background:transparent;color:#065fd4;cursor:pointer}html[dark] #yt-multiselect-toggle{color:#3ea6ff}#yt-multiselect-toggle:hover{background:var(--yt-spec-10-percent-layer,#e5e5e5)}#yt-multiselect-toggle[aria-pressed=true]{background:var(--yt-spec-badge-chip-background,#e5e5e5)}#yt-multiselect-toggle:focus-visible{outline:2px solid currentColor;outline-offset:2px}#yt-multiselect-toggle svg{width:24px;height:24px;fill:currentColor}.yt-multiselect-row{position:relative!important}.yt-multiselect-enabled,.yt-multiselect-enabled *{cursor:pointer!important}.yt-multiselect-checkbox[hidden]{display:none!important}.yt-multiselect-checkbox{appearance:none!important;position:absolute!important;right:0;bottom:0;width:44px;height:44px;z-index:10;cursor:pointer;margin:0;border:0!important;border-radius:6px 0 12px 0;background:transparent!important;background-repeat:no-repeat!important;background-position:center!important;background-size:28px 28px!important;opacity:0}.yt-multiselect-enabled .yt-multiselect-checkbox:not(:checked){opacity:.34;box-shadow:inset 0 0 0 2px #065fd4}.yt-multiselect-checkbox:checked{opacity:1;background-color:#065fd4!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m4 12 5 5L20 6' fill='none' stroke='white' stroke-width='3'/%3E%3C/svg%3E")!important}html[dark] .yt-multiselect-enabled .yt-multiselect-checkbox:not(:checked){box-shadow:inset 0 0 0 2px #3ea6ff}html[dark] .yt-multiselect-checkbox:checked{background-color:#3ea6ff!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m4 12 5 5L20 6' fill='none' stroke='%230f0f0f' stroke-width='3'/%3E%3C/svg%3E")!important}.yt-multiselect-checkbox:focus-visible{opacity:1;outline:2px solid #065fd4;outline-offset:-3px}html[dark] .yt-multiselect-checkbox:focus-visible{outline-color:#3ea6ff}.yt-multiselect-row:has(.yt-multiselect-checkbox:focus-visible){outline:2px solid #065fd4;outline-offset:-2px}html[dark] .yt-multiselect-row:has(.yt-multiselect-checkbox:focus-visible){outline-color:#3ea6ff}.yt-multiselect-checkbox:disabled{cursor:default}.yt-multiselect-enabled:hover{background-color:rgba(6,95,212,.08)!important}.yt-multiselect-row.yt-multiselect-chosen{background-color:#d5e5fb!important}html[dark] .yt-multiselect-enabled:hover{background-color:rgba(62,166,255,.12)!important}html[dark] .yt-multiselect-row.yt-multiselect-chosen{background-color:#254f70!important}`;
-  document.documentElement.append(pageStyle);
-  pageStyle.textContent += `.yt-multiselect-drop-before{box-shadow:inset 0 3px #065fd4!important}.yt-multiselect-drop-after{box-shadow:inset 0 -3px #065fd4!important}html[dark] .yt-multiselect-drop-before{box-shadow:inset 0 3px #3ea6ff!important}html[dark] .yt-multiselect-drop-after{box-shadow:inset 0 -3px #3ea6ff!important}.yt-multiselect-enabled[draggable=true],.yt-multiselect-enabled[draggable=true] *{cursor:grab!important}`;
   const bar = root.querySelector('.bar'), menu = root.querySelector('.menu'), backdrop = root.querySelector('.backdrop'), panel = root.querySelector('.panel');
   const selected = new Map(), rowBoxes = new WeakMap(), wiredRows = new WeakSet(), dragAttributes = new WeakMap();
   let groupDrag = null, dropRow = null, scrollFrame = null, scrollSpeed = 0;
@@ -44,7 +31,7 @@
 
   function svg(name) {
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
-    const paths = { close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.6 12 16 5.6 14.4 4 8 10.4A4 4 0 1 0 9.6 12ZM5 17a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm5.4-3L14 17.6l1.6-1.6-3.6-3.6-1.6 1.6ZM19 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
+    const paths = { mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.6 12 16 5.6 14.4 4 8 10.4A4 4 0 1 0 9.6 12ZM5 17a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm5.4-3L14 17.6l1.6-1.6-3.6-3.6-1.6 1.6ZM19 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]}"></path></svg>`;
   }
   function element(tag, text, className) { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; }
@@ -74,6 +61,14 @@
     if (!result?.ok) throw Object.assign(new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.'), { jobId: result?.jobId });
     return result;
   }
+  let byIndex = new Map(), byVideo = new Map(), byOccurrence = new Map();
+  function setSnapshot(value) {
+    snapshot = value; byIndex.clear(); byVideo.clear(); byOccurrence.clear();
+    for (const item of value?.items || []) {
+      byIndex.set(item.index, item); byOccurrence.set(item.setVideoId, item);
+      byVideo.set(item.videoId, byVideo.has(item.videoId) ? null : item);
+    }
+  }
   function canonical(item) { return { ...item, key: item.setVideoId ? `entry:${item.setVideoId}` : item.key }; }
   function info(row) {
     const anchor = row.querySelector('a#video-title,a#video-title-link') || row.querySelector('a[href*="/watch?v="],a[href*="/shorts/"]');
@@ -85,8 +80,8 @@
     const index = /^[0-9]+$/.test(indexText || '') ? Number(indexText) - 1 : null;
     let exact = null;
     if (snapshot?.complete && snapshot.playlistId === playlistId()) {
-      if (index !== null) { const atIndex = snapshot.items.find(item => item.index === index); if (atIndex?.videoId === videoId) exact = atIndex; }
-      else { const matches = snapshot.items.filter(item => item.videoId === videoId); if (matches.length === 1) exact = matches[0]; }
+      if (index !== null) { const atIndex = byIndex.get(index); if (atIndex?.videoId === videoId) exact = atIndex; }
+      else { exact = byVideo.get(videoId); }
     }
     if (exact?.setVideoId) return canonical(exact);
     const list = playlistId();
@@ -103,18 +98,17 @@
   function reconcileSnapshot() {
     const migrated = new Map();
     for (const item of selected.values()) {
-      const matches = snapshot?.items?.filter(entry => entry.videoId === item.videoId && (item.setVideoId ? entry.setVideoId === item.setVideoId : item.index !== null && entry.index === item.index)) || [];
-      const next = matches.length === 1 ? canonical(matches[0]) : item;
+      const match = item.setVideoId ? byOccurrence.get(item.setVideoId) : item.index !== null ? byIndex.get(item.index) : null;
+      const next = match?.videoId === item.videoId ? canonical(match) : item;
       migrated.set(next.key, next);
     }
     selected.clear(); for (const [key, item] of migrated) selected.set(key, item);
   }
   function exactSelection() {
     if (!selected.size || !snapshot?.complete) return false;
-    const occurrences = new Map(snapshot.items.map(item => [item.setVideoId, item.videoId]));
-    return [...selected.values()].every(item => item.setVideoId && occurrences.get(item.setVideoId) === item.videoId);
+    return [...selected.values()].every(item => item.setVideoId && byOccurrence.get(item.setVideoId)?.videoId === item.videoId);
   }
-  function canReorder() { return exactSelection() && snapshot.editable && snapshot.canReorder && loadedRows().some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
+  function canReorder(entries = loadedRows()) { return exactSelection() && snapshot.editable && snapshot.canReorder && entries.some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
   function selectionArgs() {
     if (!exactSelection()) throw new Error('Wait for the playlist to load, then select its videos again. Copy links works now.');
     return { playlistId: snapshot.playlistId, keys: [...selected.values()].map(item => item.setVideoId), expectedFingerprint: snapshot.fingerprint };
@@ -131,13 +125,29 @@
     root.querySelector('[data-action="menu"]').classList.toggle('has-status', Boolean(active || queued));
     root.querySelector('[data-action="links"]').disabled = !selected.size || working;
     root.querySelector('[data-action="all"]').disabled = working || !count;
-    root.querySelector('[data-action="clear"]').disabled = working || !selected.size;
+    const all = root.querySelector('[data-action="all"]');
+    const checked = selected.size > 0 && selected.size === count;
+    all.setAttribute('aria-checked', checked ? 'true' : selected.size ? 'mixed' : 'false');
+    all.setAttribute('aria-label', checked ? 'Deselect all' : 'Select all'); all.title = all.getAttribute('aria-label');
+    all.innerHTML = svg(checked ? 'all' : selected.size ? 'mixed' : 'clear');
+    root.querySelector('[data-action="save"]').disabled = working || (!selected.size && !queued && !active);
+    const progress = root.querySelector('.progress'); progress.hidden = !(working || operationStatus.busy);
+    const removing = active?.phase === 'removing', reordering = ['sorting', 'reordering'].includes(active?.phase);
+    const done = removing ? active.removed?.length || 0 : reordering ? active.reordered?.length || 0 : active?.copied?.length || 0;
+    const total = reordering ? active.plannedMoves : active?.items?.length;
+    progress.dataset.indeterminate = String(!total);
+    progress.style.setProperty('--progress', `${total ? Math.min(100, 100 * done / total) : 0}%`);
+    if (working && active) label.textContent = `${removing ? 'Removing' : reordering ? 'Ordering' : 'Saving'} ${done}${total ? ` / ${total}` : '…'}`;
     toggleButton?.setAttribute('aria-pressed', String(enabled));
     if (toggleButton) { toggleButton.title = enabled ? 'Exit video selection' : 'Select videos'; toggleButton.setAttribute('aria-label', toggleButton.title); }
     if (!menu.hidden) buildMenu();
   }
+  let statusRequest = null, statusRevision = 0;
   async function refreshStatus() {
-    try { operationStatus = await send('STATUS'); update(); } catch {}
+    if (statusRequest) return statusRequest;
+    const revision = statusRevision;
+    statusRequest = (async () => { try { const status = await send('STATUS'); if (revision === statusRevision) { operationStatus = status; update(); } } catch {} finally { statusRequest = null; } })();
+    return statusRequest;
   }
   async function maybeIntroduce() {
     if (introduced) return;
@@ -161,14 +171,31 @@
       end.insertBefore(toggleButton, end.querySelector('#buttons') || end.firstChild);
     }
   }
+  let spacer = null, observedMasthead = null;
+  const headerObserver = new ResizeObserver(positionToolbar);
+  function positionToolbar() {
+    const masthead = document.querySelector('ytd-masthead');
+    if (masthead && observedMasthead !== masthead) { headerObserver.disconnect(); headerObserver.observe(masthead); observedMasthead = masthead; }
+    host.style.setProperty('--header-bottom', `${Math.max(0, masthead?.getBoundingClientRect().bottom || 56)}px`);
+  }
+  function selectionSpace() {
+    if (!enabled) { spacer?.remove(); spacer = null; return; }
+    const container = document.querySelector('ytd-page-manager') || document.querySelector('main');
+    if (container && (!spacer?.isConnected || spacer.parentElement !== container.parentElement)) {
+      spacer?.remove(); spacer = element('div'); spacer.id = 'yt-multiselect-spacer'; spacer.setAttribute('aria-hidden', 'true'); container.before(spacer);
+    }
+  }
+  window.addEventListener('resize', positionToolbar, { passive: true });
+  window.addEventListener('scroll', positionToolbar, { passive: true });
   function scan() {
-    mountToggle();
-    if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); snapshot = null; lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
+    if (!host.isConnected) (document.querySelector('ytd-app') || document.documentElement).append(host);
+    mountToggle(); positionToolbar(); selectionSpace();
+    if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); setSnapshot(null); lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
     if (!enabled) {
       for (const row of document.querySelectorAll('.yt-multiselect-row')) releaseRow(row);
       update(); return;
     }
-    const entries = loadedRows(), currentRows = new Set(entries.map(entry => entry.row)), reorderable = canReorder();
+    const entries = loadedRows(), currentRows = new Set(entries.map(entry => entry.row)), reorderable = canReorder(entries);
     for (const row of document.querySelectorAll('.yt-multiselect-row')) if (!currentRows.has(row)) releaseRow(row);
     for (const { row, item } of entries) {
       let checkbox = rowBoxes.get(row);
@@ -221,11 +248,11 @@
     if (needsReload) { refreshNotice('Refresh YouTube to update this playlist before another change.'); return; }
     if (!id || readPending) return;
     readPending = true;
-    try { const result = await send('READ', { playlistId: id, pickerVideoId: loadedRows().map(entry => entry.item).find(validVideo)?.videoId }); if (!enabled || navigationScope() !== capturedScope) return; snapshot = result; reconcileSnapshot(); scan(); if (!result.complete && revision === noticeRevision && !working) notice('Playlist editing is unavailable.', 'Details', () => messageDialog('Playlist editing is unavailable', (result.warnings || []).join('\n') || 'The complete playlist could not be verified. Copy links remains available.'), true); }
+    try { const result = await send('READ', { playlistId: id, pickerVideoId: loadedRows().map(entry => entry.item).find(validVideo)?.videoId }); if (!enabled || navigationScope() !== capturedScope) return; setSnapshot(result); reconcileSnapshot(); scan(); if (!result.complete && revision === noticeRevision && !working) notice('Playlist editing is unavailable.', 'Details', () => messageDialog('Playlist editing is unavailable', (result.warnings || []).join('\n') || 'The complete playlist could not be verified. Copy links remains available.'), true); }
     catch (error) { if (enabled && navigationScope() === capturedScope && revision === noticeRevision && !working) report(error); }
     finally { readPending = false; if (enabled && scope !== capturedScope && playlistId()) readPlaylist(); }
   }
-  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); snapshot = null; } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
+  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
   function selectAll() { const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); for (const item of items) selected.set(item.key, item); syncRows(); }
   function deselect() { selected.clear(); lastAnchor = null; syncRows(); }
   function menuButtons() { return [...menu.querySelectorAll('button:not(:disabled)')].filter(node => node.getClientRects().length); }
@@ -236,27 +263,28 @@
   function buildMenu() {
     const focusedText = menu.contains(root.activeElement) ? root.activeElement?.textContent : null;
     menu.replaceChildren();
-    const group = (text, compactOnly = false) => { const node = element('span', text, 'menu-label'); if (compactOnly) node.classList.add('compact-only'); menu.append(node); };
-    const divide = (compactOnly = false) => { const node = element('hr'); if (compactOnly) node.classList.add('compact-only'); menu.append(node); };
-    const add = (icon, text, description, handler, disabled = false, danger = false, compactOnly = false) => {
+    const group = text => menu.append(element('span', text, 'menu-label'));
+    const divide = () => menu.append(element('hr'));
+    const add = (icon, text, description, handler, disabled = false, danger = false) => {
       const node = button('', () => { showMenu(false); return handler(); }); node.setAttribute('role', 'menuitem'); node.disabled = disabled || working;
       node.title = description; node.setAttribute('aria-label', `${text}. ${description}`);
       const copy = element('span', '', 'menu-copy'); copy.append(element('strong', text)); node.append(document.createRange().createContextualFragment(svg(icon)), copy);
-      if (danger) node.classList.add('danger'); if (compactOnly) node.classList.add('compact-only'); menu.append(node);
+      if (danger) node.classList.add('danger'); menu.append(node);
     };
-    group('Selection', true);
-    add('all', 'Select all', 'Every verified playlist video', selectAll, !snapshot?.complete && !loadedRows().length, false, true);
-    add('clear', 'Deselect all', 'Clear the current selection', deselect, !selected.size, false, true);
-    add('link', 'Copy video links', 'Plain links for NotebookLM or anywhere else', () => copyLinks(), !selected.size, false, true);
-    divide(true); group('Organize');
+    group('Selection');
+    add('all', 'Select all', 'Every verified playlist video', selectAll, !snapshot?.complete && !loadedRows().length);
+    add('clear', 'Deselect all', 'Clear the current selection', deselect, !selected.size);
+    add('link', 'Copy video links', 'Plain links for NotebookLM or anywhere else', () => copyLinks(), !selected.size);
+    divide(); group('Organize');
     add('copy', 'Copy selection', 'Keep a reusable copy for another playlist', () => queueSelection('copy'), !selected.size);
     add('cut', 'Cut selection', 'Move only after destination copies are verified', cutDialog, !exactSelection() || !snapshot?.editable);
     const queued = operationStatus.queue?.items?.length || 0;
     add('save', 'Save to playlist…', selected.size ? 'Copy the current selection' : queued ? `Continue with ${queued} saved videos` : 'Select or copy videos first', saveDialog, !selected.size && !queued && !operationStatus.activeJob);
     add('toggle', 'Move in this playlist…', 'Move the selection to the top, bottom, or a custom position', reorderDialog, !canReorder());
-    divide(); group('Safety & recovery');
+    add('all', 'Sort playlist…', 'Order the entire playlist by title, channel, or duration', sortDialog, !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length);
+    divide(); group('Saved & recovery');
     const active = operationStatus.activeJob;
-    add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.history?.length || 0} recent backups`, recoveryDialog);
+    add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.historyCount ?? operationStatus.history?.length ?? 0} recent backups`, recoveryDialog);
     add('trash', 'Delete from playlist…', 'Review titles before permanent removal', deleteSelected, !exactSelection() || !snapshot?.editable, true);
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
@@ -341,6 +369,20 @@
       return place({ position: 'before', beforeId: items[number - 1].setVideoId });
     });
   }
+  function sortDialog() {
+    if (!snapshot?.complete || !snapshot.editable || !snapshot.canReorder) throw new Error('Wait for an editable playlist to load.');
+    const capturedScope = scope, args = { playlistId: snapshot.playlistId, expectedFingerprint: snapshot.fingerprint, keys: snapshot.items.map(item => item.setVideoId) };
+    const body = compact('Sort playlist');
+    body.append(element('p', `Order all ${snapshot.items.length} videos. Duplicate entries are kept.`));
+    const field = (id, text, values) => {
+      const label = element('label', text), select = element('select'); label.htmlFor = id; select.id = id;
+      for (const [value, title] of values) { const option = element('option', title); option.value = value; select.append(option); }
+      body.append(label, select); return select;
+    };
+    const by = field('sort-by', 'Sort by', [['title', 'Title'], ['channel', 'Channel'], ['duration', 'Duration']]);
+    const direction = field('sort-direction', 'Order', [['ascending', 'Ascending'], ['descending', 'Descending']]);
+    compactActions(body, 'Sort', () => { if (navigationScope() !== capturedScope) throw new Error('The playlist changed. Review sorting again.'); return operation('SORT', { ...args, sortBy: by.value, descending: direction.value === 'descending' }); });
+  }
   function clearDrop() {
     dropRow?.classList.remove('yt-multiselect-drop-before', 'yt-multiselect-drop-after');
     dropRow = null;
@@ -397,8 +439,8 @@
       if (!enabled || navigationScope() !== operationScope) return result;
       if (result.job?.phase === 'ready_to_remove') moveReview(result.job);
       else {
-        deselect(); announce(type === 'REMOVE' ? 'Videos deleted from playlist.' : type === 'FINISH_MOVE' ? 'Videos moved.' : type === 'REORDER' ? 'Playlist order updated.' : 'Videos saved.');
-        if ((['REMOVE', 'FINISH_MOVE', 'REORDER'].includes(type) && result.job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId())) location.reload();
+        deselect(); announce(type === 'REMOVE' ? 'Videos deleted from playlist.' : type === 'FINISH_MOVE' ? 'Videos moved.' : ['REORDER', 'SORT'].includes(type) ? 'Playlist order updated.' : 'Videos saved.');
+        if ((['REMOVE', 'FINISH_MOVE', 'REORDER', 'SORT'].includes(type) && result.job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId())) location.reload();
       }
       return result;
     } finally { working = false; refreshStatus(); syncRows(); }
@@ -448,7 +490,7 @@
     body.append(button(removing ? 'Close saved operation' : 'Keep originals and close', async () => { await send('DISMISS', { jobId: job.id }); closePanel(); notice(''); }), button('Details', () => { closePanel(); return recoveryDialog(); }));
   }
   async function recoveryDialog() {
-    const status = await send('STATUS'), body = dialog('Saved selections & recovery');
+    const status = await send('STATUS', { detailed: true }), body = dialog('Saved selections & recovery');
     body.append(element('p', 'Your saved videos and playlist backups stay available when you close or reload YouTube.', 'note'));
     const render = (job, current = false) => {
       const card = element('div', '', 'saved'), items = job.items || [], actions = element('div', '', 'saved-actions');
@@ -483,7 +525,7 @@
     footer(body);
   }
 
-  const actions = { close: () => toggle(false), all: selectAll, clear: deselect, links: () => copyLinks(), save: saveDialog, menu: () => showMenu(menu.hidden) };
+  const actions = { close: () => toggle(false), all: () => root.querySelector('[data-action=all]').getAttribute('aria-checked') === 'true' ? deselect() : selectAll(), save: saveDialog, clear: deselect, links: () => copyLinks(), menu: () => showMenu(menu.hidden) };
   root.addEventListener('click', event => { const action = event.target.closest?.('[data-action]')?.dataset.action; if (action) Promise.resolve().then(actions[action]).catch(report); });
   backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDialog(); });
   document.addEventListener('click', event => { if (!event.composedPath().includes(host)) { showMenu(false); closePanel(); } });
@@ -546,13 +588,12 @@
   chrome.runtime.onMessage?.addListener(message => { if (message.type === 'TOGGLE') toggle(!enabled); });
   chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes.activeJob || changes.queue || changes.history) refreshStatus();
-    const job = changes.activeJob?.newValue;
-    if (!job || !enabled || !working) return;
-    if (job.phase === 'copying') announce(`Saving ${job.copied?.length || 0} / ${job.items.length} videos… Originals kept.`);
-    else if (job.phase === 'removing') announce(`Removing ${job.removed?.length || 0} / ${job.items.length} videos…`);
-    else if (job.phase === 'sorting') announce(`Sorting playlist…`);
-    else if (job.phase === 'reordering') announce(`Updating playlist order… ${job.reordered?.length || 0} moves verified.`);
+    if (!changes.activeJob && !changes.queue && !changes.history && !changes.historyCount) return;
+    statusRevision++;
+    for (const key of ['activeJob', 'queue']) if (changes[key]) operationStatus[key] = changes[key].newValue || null;
+    if (changes.historyCount) operationStatus.historyCount = changes.historyCount.newValue;
+    else if (changes.history) operationStatus.historyCount = changes.history.newValue?.length || 0;
+    update();
   });
   scan();
 })();

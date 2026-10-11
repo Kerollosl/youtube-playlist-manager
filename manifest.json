@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Multiselect (Custom)",
-  "version": "1.4.0",
+  "name": "YouTube Multiselect",
+  "version": "1.5.0",
   "description": "Fast YouTube playlist multiselect with batched saves, verified moves, plain-text links, and recovery.",
   "minimum_chrome_version": "120",
   "permissions": [
@@ -27,12 +27,25 @@
       "js": [
         "src/content.js"
       ],
-      "run_at": "document_idle"
+      "run_at": "document_idle",
+      "css": [
+        "src/page.css"
+      ]
     }
   ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/ui.css"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
+      ]
+    }
+  ]
 }

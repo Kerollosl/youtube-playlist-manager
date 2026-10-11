@@ -1,0 +1,107 @@
+#yt-multiselect-toggle {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 44px;
+  width:44px;
+  height:44px;
+  margin:0 4px;
+  border:0;
+  border-radius:50%;
+  background:transparent;
+  color:var(--yt-spec-text-primary,#0f0f0f);
+  cursor:pointer;
+}
+html[dark] #yt-multiselect-toggle {
+  color:var(--yt-spec-text-primary,#f1f1f1);
+}
+#yt-multiselect-toggle:hover,#yt-multiselect-toggle[aria-pressed=true] {
+  background:var(--yt-spec-10-percent-layer,#e5e5e5);
+}
+#yt-multiselect-toggle:focus-visible {
+  outline:2px solid var(--yt-spec-call-to-action,#065fd4);
+  outline-offset:2px;
+}
+#yt-multiselect-toggle svg {
+  width:24px;
+  height:24px;
+  fill:currentColor;
+}
+#yt-multiselect-spacer {
+  display:block;
+  height:52px;
+  min-height:52px;
+  flex-shrink:0;
+  pointer-events:none;
+}
+.yt-multiselect-row {
+  position:relative!important;
+}
+.yt-multiselect-checkbox[hidden] {
+  display:none!important;
+}
+.yt-multiselect-checkbox {
+  appearance:none!important;
+  position:absolute!important;
+  inset-inline-start:0;
+  top:50%;
+  transform:translateY(-50%);
+  width:44px;
+  height:44px;
+  z-index:10;
+  cursor:pointer;
+  margin:0;
+  border:0!important;
+  border-radius:50%;
+  background-color:transparent!important;
+  background-repeat:no-repeat!important;
+  background-position:center!important;
+  background-size:20px 20px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' fill='white' fill-opacity='.9' stroke='%23606060' stroke-width='2'/%3E%3C/svg%3E")!important;
+}
+.yt-multiselect-checkbox:checked {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='2' fill='%230f0f0f'/%3E%3Cpath d='m6 12 4 4 8-8' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E")!important;
+}
+html[dark] .yt-multiselect-checkbox {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' fill='%230f0f0f' fill-opacity='.9' stroke='%23aaa' stroke-width='2'/%3E%3C/svg%3E")!important;
+}
+html[dark] .yt-multiselect-checkbox:checked {
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='2' y='2' width='20' height='20' rx='2' fill='%23f1f1f1'/%3E%3Cpath d='m6 12 4 4 8-8' fill='none' stroke='%230f0f0f' stroke-width='2'/%3E%3C/svg%3E")!important;
+}
+.yt-multiselect-checkbox:focus-visible {
+  outline:2px solid var(--yt-spec-call-to-action,#065fd4);
+  outline-offset:-4px;
+}
+.yt-multiselect-checkbox:disabled {
+  cursor:default;
+  opacity:.45;
+}
+ytd-playlist-video-renderer.yt-multiselect-enabled #index,ytd-playlist-panel-video-renderer.yt-multiselect-enabled #index {
+  visibility:hidden;
+}
+ytd-rich-item-renderer .yt-multiselect-checkbox,ytd-grid-video-renderer .yt-multiselect-checkbox {
+  top:4px;
+  inset-inline-start:4px;
+  transform:none;
+}
+.yt-multiselect-enabled:hover {
+  background-color:var(--yt-spec-5-percent-layer,#0000000a)!important;
+}
+.yt-multiselect-row.yt-multiselect-chosen {
+  background-color:var(--yt-spec-10-percent-layer,#00000012)!important;
+}
+html[dark] .yt-multiselect-enabled:hover {
+  background-color:var(--yt-spec-5-percent-layer,#ffffff0a)!important;
+}
+html[dark] .yt-multiselect-row.yt-multiselect-chosen {
+  background-color:var(--yt-spec-10-percent-layer,#ffffff1a)!important;
+}
+.yt-multiselect-drop-before {
+  box-shadow:inset 0 2px var(--yt-spec-call-to-action,#065fd4)!important;
+}
+.yt-multiselect-drop-after {
+  box-shadow:inset 0 -2px var(--yt-spec-call-to-action,#065fd4)!important;
+}
+.yt-multiselect-enabled[draggable=true] {
+  cursor:grab!important;
+}

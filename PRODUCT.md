@@ -1,12 +1,12 @@
-# YouTube Multiselect (Custom)
+# YouTube Multiselect
 
 A personal Chrome extension for selecting videos directly on YouTube and organizing them safely. Kerollos uses playlists as queues and copies selected video links into NotebookLM.
 
 ## Product constraints
 
-The existing Multiselect for YouTube experience is the functional reference: a masthead toggle, clickable video cards with blue selection highlights and corner checkmarks, and a compact action bar. The extension has no standalone manager page. YouTube remains the visual and behavioral authority.
+The existing Multiselect for YouTube experience is the functional reference: a masthead toggle, clickable video cards with restrained highlights and leading checkboxes, and selection controls beneath the masthead. The extension has no standalone manager page. YouTube remains the visual and behavioral authority.
 
-The toolbar shows Select all and Deselect all. The action menu contains Cut, Copy, Save to playlist, Copy links, and Delete selected. Copy links produces clean video URLs as plain text, one URL per line. Playlist saving and moving preserve a durable selection. Cut queues a move; it does not delete originals. Copy verification and a separate removal review must precede source removal. UI improvements preserve account fingerprints, exact playlist entry identity, destination checks, and recovery journals.
+The toolbar shows a mixed-state selection checkbox, count, Save, Copy links, More, and Close. Sorting the entire playlist is available in More. The action menu contains Cut, Copy, Save to playlist, Copy links, and Delete selected. Copy links produces clean video URLs as plain text, one URL per line. Playlist saving and moving preserve a durable selection. Cut queues a move; it does not delete originals. Copy verification and a separate removal review must precede source removal. UI improvements preserve account fingerprints, exact playlist entry identity, destination checks, and recovery journals.
 
 ## Selection surface
 

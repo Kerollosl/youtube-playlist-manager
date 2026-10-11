@@ -1,5 +1,5 @@
 import { youtubeCommand } from './youtube-api.js';
-import { assertAccount, assertComplete, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, reorderItems } from './operations.js';
+import { assertAccount, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, orderPlan, reorderItems } from './operations.js';
 
 let busy = false;
 let lastEditAt = 0;
@@ -49,7 +49,7 @@ async function save(job) {
 async function archive(job) {
   const { history = [], queue } = await chrome.storage.local.get(['history', 'queue']);
   const clearCut = job.phase === 'completed' && job.kind === 'move' && queue?.kind === 'move' && queue.sourceId === job.sourceId && JSON.stringify(queue.items.map(item => item.setVideoId)) === JSON.stringify(job.items.map(item => item.setVideoId));
-  await chrome.storage.local.set({ history: [structuredClone(job), ...history].slice(0, 10), activeJob: null, ...(clearCut ? { queue: null } : {}) });
+  await chrome.storage.local.set({ history: [structuredClone(job), ...history].slice(0, 10), historyCount: Math.min(history.length + 1, 10), activeJob: null, ...(clearCut ? { queue: null } : {}) });
 }
 
 async function run(message) {
@@ -60,8 +60,16 @@ async function run(message) {
   }
   if (message.type === 'PLAYLISTS') return api(message.tabId, { type: 'playlists', videoId: message.videoId || await savedProbe() });
   if (message.type === 'STATUS') {
-    const stored = await chrome.storage.local.get(['activeJob', 'history', 'queue']);
-    return { ...stored, busy };
+    if (message.detailed) return { ...await chrome.storage.local.get(['activeJob', 'history', 'queue']), busy };
+    const stored = await chrome.storage.local.get(['activeJob', 'queue', 'historyCount']);
+    const summary = job => {
+      if (!job) return job;
+      const { sourceBefore, targetBefore, removalBefore, desiredIds, ...rest } = job;
+      const title = snapshot => snapshot ? { playlistId: snapshot.playlistId, title: snapshot.title } : null;
+      return { ...rest, sourceBefore: title(sourceBefore), targetBefore: title(targetBefore) };
+    };
+    const historyCount = stored.historyCount ?? (await chrome.storage.local.get('history')).history?.length ?? 0;
+    return { activeJob: summary(stored.activeJob), queue: summary(stored.queue), historyCount, busy };
   }
   if (message.type === 'QUEUE') {
     const source = await read(message.tabId, message.playlistId, undefined, message.expectedFingerprint);
@@ -116,9 +124,11 @@ async function run(message) {
     if (message.type === 'FINISH_MOVE') {
       job = activeJob;
       if (job?.phase !== 'ready_to_remove' || job.kind !== 'move' || message.jobId !== job.id) throw new Error('There is no verified move to finish.');
-      const source = await read(message.tabId, job.sourceId, job.items[0]?.videoId, job.fingerprint);
+      const [source, destination] = await Promise.all([
+        read(message.tabId, job.sourceId, job.items[0]?.videoId, job.fingerprint),
+        read(message.tabId, job.targetId, job.items[0]?.videoId, job.fingerprint),
+      ]);
       assertAccount(source, job.fingerprint);
-      const destination = await read(message.tabId, job.targetId, job.items[0]?.videoId, job.fingerprint);
       assertCopied(job, destination);
       if (!source.editable) throw new Error('The source playlist is not editable.');
       job.phase = 'removing';
@@ -190,32 +200,15 @@ async function run(message) {
     } else {
       // Sorting is occurrence-based and never removes any video.
       const desired = [...source.items];
-      const compare = message.sortBy === 'duration' ? (a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0) : message.sortBy === 'channel' ? (a, b) => a.channel.localeCompare(b.channel) : (a, b) => a.title.localeCompare(b.title);
-      desired.sort(compare);
-      if (message.descending) desired.reverse();
+      if (!['title', 'channel', 'duration'].includes(message.sortBy)) throw new Error('Choose title, channel, or duration.');
+      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+      const compare = message.sortBy === 'duration' ? (a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0) : (a, b) => collator.compare(a[message.sortBy] || '', b[message.sortBy] || '');
+      desired.sort((a, b) => (message.descending ? -1 : 1) * compare(a, b));
       job.items = desired;
       job.phase = 'sorting';
       await save(job);
-      // Moving each item after its predecessor makes the final sequence exact.
-      // Leave desired[0] in place until subsequent moves bring it to the front.
-      for (let i = 1; i < desired.length; i++) {
-        const before = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
-        assertAccount(before, job.fingerprint);
-        if (before.items.length !== source.items.length || source.items.some(item => !before.items.some(entry => entry.setVideoId === item.setVideoId && entry.videoId === item.videoId))) throw new Error('Playlist membership changed. Sorting stopped.');
-        const action = { action: 'ACTION_MOVE_VIDEO_AFTER', setVideoId: desired[i].setVideoId, movedSetVideoIdPredecessor: desired[i - 1].setVideoId };
-        job.intent = action;
-        await save(job);
-        await api(message.tabId, { type: 'edit', playlistId: sourceId, action, expectedFingerprint: job.fingerprint });
-        const after = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
-        assertAccount(after, job.fingerprint);
-        const position = after.items.findIndex(item => item.setVideoId === desired[i].setVideoId);
-        if (position < 1 || after.items[position - 1].setVideoId !== desired[i - 1].setVideoId) throw new Error('Sort step could not be verified.');
-        job.intent = null;
-        await save(job);
-      }
-      const final = await read(message.tabId, sourceId, job.items[0]?.videoId, job.fingerprint);
-      assertAccount(final, job.fingerprint);
-      if (JSON.stringify(final.items.map(item => item.setVideoId)) !== JSON.stringify(desired.map(item => item.setVideoId))) throw new Error('Final sort order could not be verified.');
+      const plan = orderPlan(source, desired.map(item => item.setVideoId));
+      await reorderItems(job, plan, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
       job.phase = 'completed';
       await archive(job);
     }

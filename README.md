@@ -1,17 +1,17 @@
-# YouTube Multiselect (Custom)
+# YouTube Multiselect
 
-A custom Chrome extension that works directly inside YouTube. The interface follows Multiselect for YouTube: a masthead toggle, clickable video cards, and a compact bottom action bar.
+A custom Chrome extension that works directly inside YouTube. Selection controls sit directly beneath YouTube’s masthead, using its colors and typography. Save and Copy links are one click away.
 
 ## Features
 
-- Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards turn blue and show a corner checkmark.
-- Select all or deselect all from the action bar.
+- Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a quiet native highlight and a small leading checkbox.
+- Use the toolbar’s checkbox to select all, show a partial selection, or deselect all.
 - **Copy selected links** as plain text: one clean YouTube URL per line, ready to paste into NotebookLM.
 - Copy selections into a durable local queue; Cut stages a move without removing originals.
 - Paste to another playlist using YouTube's signed-in session.
 - Verify destination copies before offering a separate confirmation to remove originals.
 - A grouped action menu clearly separates link copying, reusable playlist selections, saving, recovery, and deletion.
-- Save, move, and delete up to 50 videos per mutation batch instead of rereading the full playlist around every video.
+- Save, move, delete, and sort with up to 50 actions per verified mutation batch.
 - Move selections to the top or bottom of their current playlist, drag them between videos, or choose a video number to place them before. Selected videos keep their existing playlist order.
 - Use YouTube's light/dark colors. All controls and dialogs stay on the YouTube page.
 
@@ -70,11 +70,25 @@ Node.js 22 or later. No third-party runtime dependencies.
 ```sh
 npm test
 npm run validate
+npm run benchmark
 ```
 
 Tests cover exact duplicate occurrences, scoped pagination, modern empty playlist identity and ownership, account changes, lost responses, durable Cut/Save behavior, failed copies, storage failure before writes, and top/bottom/custom ordering across multiple batches. Browser fixtures verify full-card selection, the compact action menu, saved Cut selections, themes, narrow layouts, link format, group dragging, and native moves after deactivation. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
 
 Sources: [Original interface](https://chromewebstore.google.com/detail/multiselect-for-youtube/gpgbiinpmelaihndlegbgfkmnpofgfei), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [Watch Later API limitation](https://developers.google.com/youtube/v3/docs/playlistItems/list), [YouTube.js playlist action reference](https://github.com/LuanRT/YouTube.js/blob/main/src/core/managers/PlaylistManager.ts).
+
+### Version 1.5.0
+
+- Replaced the floating bottom toolbar and saturated card highlights with a 52px masthead selection bar, native surfaces, leading checkboxes, and direct Save access.
+- Added stable natural sorting by title or channel, plus duration sorting in either direction. Equal values keep their original order; duplicate video occurrences stay distinct.
+- Sorting and group reordering keep a longest ordered subsequence and move only the remaining entries. Each batch is journaled and its full order and membership are verified, with no uncertain writes replayed.
+- Indexed playlist entries once per snapshot instead of searching the full playlist for every visible row. Progress updates use storage notifications directly; routine status replies exclude immutable backups and history contents. Full recovery downloads remain available.
+- Read the source and destination concurrently when finishing a verified move, retaining both account and destination checks before deletion.
+- Split page and shadow UI styles into separate files, exposed only the UI stylesheet to YouTube, and retained zero runtime dependencies.
+
+`npm run benchmark` reports a deterministic request budget, not live YouTube timings. For a reverse sort of 100 entries, the normal path now needs **2 mutation batches and 3 logical playlist reads**, versus **99 mutations and 200 logical reads** before. Each logical read can require multiple pagination requests. An unchanged playlist needs one initial read and no writes. Verification retries and YouTube latency can increase actual work.
+
+Browser tests exercise both themes at 1280, 390, 320, and 280px, rerendered selection, keyboard navigation and focus, direct Save, range selection, plain links, navigation cleanup, sorting, late-copy recovery, and progress notifications. A signed-in live playlist was not changed during validation; reload the extension and refresh YouTube to try the release.
 
 ### Version 1.4.0
 
