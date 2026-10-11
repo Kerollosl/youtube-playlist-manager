@@ -97,10 +97,12 @@
     return [...page.querySelectorAll(selector)].filter(row => visible(row) && !row.parentElement?.closest(ROWS)).map(row => ({ row, item: info(row) })).filter(entry => entry.item);
   }
   function reconcileSnapshot() {
+    if (!snapshot?.complete) return;
     const migrated = new Map();
     for (const item of selected.values()) {
-      const match = item.setVideoId ? byOccurrence.get(item.setVideoId) : item.index !== null ? byIndex.get(item.index) : null;
+      const match = item.setVideoId ? byOccurrence.get(item.setVideoId) : item.index != null ? byIndex.get(item.index) : byVideo.get(item.videoId);
       const next = match?.videoId === item.videoId ? canonical(match) : item;
+      if (lastAnchor === item.key) lastAnchor = next.key;
       migrated.set(next.key, next);
     }
     selected.clear(); for (const [key, item] of migrated) selected.set(key, item);
@@ -137,7 +139,7 @@
     const done = removing ? active.removed?.length || 0 : reordering ? active.reordered?.length || 0 : active?.copied?.length || 0;
     const total = reordering ? active.plannedMoves : active?.itemCount ?? active?.items?.length;
     progress.dataset.indeterminate = String(!total);
-    progress.style.setProperty('--progress', `${total ? Math.min(100, 100 * done / total) : 0}%`);
+    progress.style.setProperty('--progress', String(total ? Math.min(1, done / total) : 0));
     if (working && active) label.textContent = `${removing ? 'Removing' : reordering ? 'Ordering' : 'Saving'} ${done}${total ? ` / ${total}` : '…'}`;
     const stop = root.querySelector('[data-action=stop]');
     stop.hidden = !working || !active?.id || !['copying', 'removing', 'sorting', 'reordering'].includes(active.phase);
@@ -176,25 +178,9 @@
       end.insertBefore(toggleButton, end.querySelector('#buttons') || end.firstChild);
     }
   }
-  let spacer = null, observedMasthead = null;
-  const headerObserver = new ResizeObserver(positionToolbar);
-  function positionToolbar() {
-    const masthead = document.querySelector('ytd-masthead');
-    if (masthead && observedMasthead !== masthead) { headerObserver.disconnect(); headerObserver.observe(masthead); observedMasthead = masthead; }
-    host.style.setProperty('--header-bottom', `${Math.max(0, masthead?.getBoundingClientRect().bottom || 56)}px`);
-  }
-  function selectionSpace() {
-    if (!enabled) { spacer?.remove(); spacer = null; return; }
-    const container = document.querySelector('ytd-page-manager') || document.querySelector('main');
-    if (container && (!spacer?.isConnected || spacer.parentElement !== container.parentElement)) {
-      spacer?.remove(); spacer = element('div'); spacer.id = 'yt-multiselect-spacer'; spacer.setAttribute('aria-hidden', 'true'); container.before(spacer);
-    }
-  }
-  window.addEventListener('resize', positionToolbar, { passive: true });
-  window.addEventListener('scroll', positionToolbar, { passive: true });
   function scan() {
     if (!host.isConnected) (document.querySelector('ytd-app') || document.documentElement).append(host);
-    mountToggle(); positionToolbar(); selectionSpace();
+    mountToggle();
     if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); setSnapshot(null); lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
     if (!enabled) {
       for (const row of document.querySelectorAll('.yt-multiselect-row')) releaseRow(row);
@@ -265,9 +251,17 @@
     const trigger = root.querySelector('[data-action="menu"]'); host.toggleAttribute('data-menu-open', value); menu.hidden = !value; trigger.setAttribute('aria-expanded', String(value));
     if (value) { closePanel(); buildMenu(); refreshStatus(); if (focus) menuButtons()[0]?.focus(); }
   }
+  let menuSignature = '';
   function buildMenu() {
+    const entries = loadedRows(), exact = exactSelection(), reorderable = canReorder(entries);
+    const queued = operationStatus.queue?.items?.length || 0, active = operationStatus.activeJob;
+    const signature = JSON.stringify([selected.size, exact, reorderable, entries.length, needsReload, working, snapshot?.complete, snapshot?.editable, snapshot?.canReorder, snapshot?.items.length, queued, active?.id, active?.phase, operationStatus.historyCount ?? operationStatus.history?.length ?? 0]);
+    // YouTube rerenders often. Keep menu buttons stable while a click is in progress.
+    if (signature === menuSignature && menu.children.length) return;
+    menuSignature = signature;
     const focusedText = menu.contains(root.activeElement) ? root.activeElement?.textContent : null;
     menu.replaceChildren();
+    if (!selected.size) menu.append(element('p', queued ? `${queued} saved videos ready. Select videos to use selection actions.` : 'Click videos to select them, then choose an action.', 'menu-hint'));
     const group = text => menu.append(element('span', text, 'menu-label'));
     const divide = () => menu.append(element('hr'));
     const add = (icon, text, description, handler, disabled = false, danger = false) => {
@@ -277,21 +271,20 @@
       if (danger) node.classList.add('danger'); menu.append(node);
     };
     group('Selection');
-    add('all', 'Select all', 'Every verified playlist video', selectAll, !snapshot?.complete && !loadedRows().length);
+    add('all', 'Select all', 'Every verified playlist video', selectAll, !snapshot?.complete && !entries.length);
     add('clear', 'Deselect all', 'Clear the current selection', deselect, !selected.size);
     add('link', 'Copy video links', 'Plain links for NotebookLM or anywhere else', () => copyLinks(), !selected.size);
     divide(); group('Organize');
     add('copy', 'Copy selection', 'Keep a reusable copy for another playlist', () => queueSelection('copy'), !selected.size);
-    add('cut', 'Cut selection', 'Move only after destination copies are verified', cutDialog, !exactSelection() || !snapshot?.editable);
-    const queued = operationStatus.queue?.items?.length || 0;
+    const editReason = !selected.size ? 'Select videos first' : needsReload ? 'Refresh YouTube before editing again' : !exact ? 'Wait for the complete playlist to load' : !snapshot?.editable ? 'This playlist is not editable' : null;
+    add('cut', 'Cut selection', editReason || 'Move only after destination copies are verified', cutDialog, Boolean(editReason));
     add('save', 'Save to playlist…', selected.size ? 'Copy the current selection' : queued ? `Continue with ${queued} saved videos` : 'Select or copy videos first', saveDialog, !selected.size && !queued && !operationStatus.activeJob);
-    add('toggle', 'Move in this playlist…', 'Move the selection to the top, bottom, or a custom position', reorderDialog, !canReorder());
+    add('toggle', 'Move in this playlist…', editReason || (!reorderable ? 'Open a playlist that supports reordering' : 'Move the selection to the top, bottom, or a custom position'), reorderDialog, !reorderable);
     add('all', 'Sort playlist…', 'Order the entire playlist by title, channel, or duration', sortDialog, needsReload || !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length);
     divide(); group('Saved & recovery');
-    const active = operationStatus.activeJob;
     add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.historyCount ?? operationStatus.history?.length ?? 0} recent backups`, recoveryDialog);
     add('recovery', 'Performance', 'Recent action timings on this device', performanceDialog);
-    add('trash', 'Delete from playlist…', 'Review titles before permanent removal', deleteSelected, !exactSelection() || !snapshot?.editable, true);
+    add('trash', 'Delete from playlist…', editReason || 'Review titles before permanent removal', deleteSelected, Boolean(editReason), true);
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
   async function copyLinks(items = [...selected.values()]) {
@@ -314,6 +307,7 @@
       output.replaceChildren(element('p', 'Reading playlist…'));
       try {
         const result = await send('READ', { playlistId: id, pickerVideoId: probe }); if (!body.isConnected) return;
+        if (enabled && id === playlistId() && !needsReload) { setSnapshot(result); reconcileSnapshot(); scan(); }
         output.replaceChildren(element('p', `${result.title}: ${result.complete ? `Complete · ${result.items.length} videos` : 'Incomplete'}. ${result.editable ? 'Editable.' : 'Editing unavailable.'}`));
         for (const warning of result.warnings || []) output.append(element('p', warning, 'error'));
         const details = element('textarea'); details.readOnly = true; details.setAttribute('aria-label', 'Reader diagnostics');

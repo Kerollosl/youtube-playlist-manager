@@ -11,6 +11,15 @@
         ],
         "createdAt": "2026-10-09T19:14:36.950Z",
         "reason": "Agent decision: DESIGN.md pins Roboto with Arial fallback so injected playlist controls match YouTube typography."
+      },
+      {
+        "rule": "overused-font",
+        "value": "roboto",
+        "files": [
+          "src/ui.css"
+        ],
+        "createdAt": "2026-10-11T17:02:11.989Z",
+        "reason": "Agent decision: DESIGN.md explicitly specifies Roboto to match YouTube; preserve the host typography."
       }
     ]
   }

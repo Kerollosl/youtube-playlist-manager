@@ -1,16 +1,16 @@
 # YouTube Multiselect
 
-A custom Chrome extension that works directly inside YouTube. Selection controls sit directly beneath YouTube’s masthead, using its colors and typography. Save and Copy links are one click away.
+A custom Chrome extension that works directly inside YouTube. Selection controls float at the bottom center, using YouTube’s colors and typography. Save and Copy links are one click away.
 
 ## Features
 
-- Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a quiet native highlight and a small leading checkbox.
+- Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a subtle blue tint. No visible checkbox covers YouTube’s buttons; keyboard and screen-reader selection remain available.
 - Use the toolbar’s checkbox to select all, show a partial selection, or deselect all.
 - **Copy selected links** as plain text: one clean YouTube URL per line, ready to paste into NotebookLM.
 - Copy selections into a durable local queue; Cut stages a move without removing originals.
 - Paste to another playlist using YouTube's signed-in session.
 - Verify destination copies before offering a separate confirmation to remove originals.
-- A grouped action menu clearly separates link copying, reusable playlist selections, saving, recovery, and deletion.
+- An upward-opening grouped action menu clearly separates link copying, reusable playlist selections, saving, recovery, and deletion.
 - Save, move, delete, and sort with up to 50 actions per verified mutation batch.
 - Move selections to the top or bottom of their current playlist, drag them between videos, or choose a video number to place them before. Selected videos keep their existing playlist order.
 - Use YouTube's light/dark colors. All controls and dialogs stay on the YouTube page.
@@ -76,6 +76,13 @@ npm run benchmark
 Tests cover exact duplicate occurrences, scoped pagination, modern empty playlist identity and ownership, account changes, lost responses, durable Cut/Save behavior, failed copies, storage failure before writes, and top/bottom/custom ordering across multiple batches. Browser fixtures verify full-card selection, the compact action menu, saved Cut selections, themes, narrow layouts, link format, group dragging, and native moves after deactivation. Live playlist mutations still require smoke testing after loading the extension, using a disposable playlist.
 
 Sources: [Original interface](https://chromewebstore.google.com/detail/multiselect-for-youtube/gpgbiinpmelaihndlegbgfkmnpofgfei), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [Watch Later API limitation](https://developers.google.com/youtube/v3/docs/playlistItems/list), [YouTube.js playlist action reference](https://github.com/LuanRT/YouTube.js/blob/main/src/core/managers/PlaylistManager.ts).
+
+### Version 1.6.1
+
+- Restored a compact bottom-center toolbar. Menus and destination pickers open above it and stay inside narrow screens; notices appear above the toolbar.
+- Click video cards to toggle a subtle blue selection tint. Removed visible row checkboxes and restored native playlist indices. Tab and Space still provide keyboard selection with a visible focus outline.
+- Fixed selections made before an unindexed playlist finishes loading, including Shift-click range anchors. A successful current-playlist reader check now restores editing controls, while playlists requiring a page refresh remain protected.
+- Keep menu buttons stable through unrelated page rerenders so clicks are not lost. Empty selections show guidance, and unavailable editing actions explain their prerequisites.
 
 ### Version 1.6.0
 

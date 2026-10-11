@@ -107,8 +107,8 @@ button svg {
 }
 .menu {
   position:absolute;
-  top:calc(100% + 4px);
-  right:16px;
+  bottom:calc(100% + 10px);
+  right:0;
   width:264px;
   max-width:calc(100vw - 24px);
   max-height:min(76vh,560px);
@@ -158,12 +158,18 @@ button svg {
   border-top:1px solid var(--line);
   margin:6px 0;
 }
+.menu-hint {
+  margin:4px 16px 8px;
+  font-size:12px;
+  line-height:1.5;
+  color:var(--muted);
+}
 .menu .compact-only {
   display:flex;
 }
 .toast {
   position:fixed;
-  bottom:24px;
+  bottom:calc(88px + env(safe-area-inset-bottom,0px));
   left:50%;
   transform:translateX(-50%);
   z-index:var(--notice-z);
@@ -338,8 +344,8 @@ button svg {
 }
 .panel {
   position:absolute;
-  top:calc(100% + 4px);
-  right:16px;
+  bottom:calc(100% + 10px);
+  right:0;
   width:320px;
   max-width:calc(100vw - 24px);
   max-height:65vh;
@@ -396,22 +402,28 @@ button svg {
 :host([data-menu-open]) .toast,:host([data-panel-open]) .toast {
   visibility:hidden;
 }
-/* Selection follows the masthead and shares YouTube's surface and typography. */
+/* Floating controls stay within reach without shifting YouTube's page layout. */
 .bar {
   position:fixed;
-  top:var(--header-bottom,56px);
-  inset-inline:0;
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  left:50%;
+  transform:translateX(-50%);
+  width:max-content;
+  max-width:calc(100vw - 24px);
   z-index:var(--toolbar-z);
-  height:52px;
+  height:56px;
   display:flex;
   align-items:center;
   gap:4px;
-  padding:4px 24px;
+  padding:5px 8px;
   background:var(--surface);
-  border-bottom:1px solid var(--line);
+  border:1px solid var(--line);
+  border-radius:18px;
+  box-shadow:0 6px 28px #0004;
   white-space:nowrap;
 }
 .count {
+  flex:1;
   min-width:0;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -441,8 +453,8 @@ button svg {
 }
 .progress {
   position:absolute;
-  bottom:-1px;
-  inset-inline:0;
+  bottom:0;
+  inset-inline:16px;
   height:2px;
   background:var(--hover);
   overflow:hidden;
@@ -450,16 +462,22 @@ button svg {
 .progress span {
   display:block;
   height:100%;
-  width:var(--progress,0%);
+  width:100%;
   background:var(--blue);
-  transition:width 180ms;
+  transform-origin:left center;
+  transform:scaleX(var(--progress,0));
+  transition:transform 180ms;
 }
 .bar[aria-busy=true] .progress[data-indeterminate=true] span {
   width:30%;
+  transform:none;
   animation:working 1.2s ease-in-out infinite;
 }
 .menu,.panel {
-  max-height:calc(100dvh - var(--header-bottom,56px) - 68px);
+  left:50%;
+  right:auto;
+  transform:translateX(-50%);
+  max-height:min(560px,calc(100dvh - 106px - env(safe-area-inset-bottom,0px)));
   border-radius:12px;
   background:var(--yt-spec-raised-background,var(--surface));
   box-shadow:0 4px 16px #0003;
@@ -494,6 +512,7 @@ button svg {
 }
 @media(max-width:600px) {
   .bar {
+    max-width:calc(100vw - 16px);
     padding:4px 8px;
     gap:0;
   }
@@ -517,7 +536,6 @@ button svg {
     gap:0;
   }
   .menu,.panel {
-    right:8px;
     max-width:calc(100vw - 16px);
   }
   .backdrop {

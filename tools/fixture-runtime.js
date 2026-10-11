@@ -9,13 +9,19 @@ const savedOrder = JSON.parse(sessionStorage.getItem('fixture-order') || 'null')
 if (Array.isArray(savedOrder) && savedOrder.length === fixtureItems.length && new Set(savedOrder).size === fixtureItems.length && savedOrder.every(id => fixtureItems.some(item => item.setVideoId === id))) fixtureItems.sort((first, second) => savedOrder.indexOf(first.setVideoId) - savedOrder.indexOf(second.setVideoId));
 const fixtureStorage = { history: [], queue: null };
 const storageListeners = [];
+let fixtureReads = 0;
 window.chrome = {
   runtime: {
     getURL: path => new URL('../' + path, location.href).href,
-    getManifest: () => ({ version: '1.6.0' }),
+    getManifest: () => ({ version: '1.6.1' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
-      if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
+      if (message.type === 'READ') {
+        fixtureReads++;
+        if (url.searchParams.get('scenario') === 'delayed-unindexed') while (!window.fixtureReadReady) await new Promise(resolve => setTimeout(resolve, 10));
+        const complete = url.searchParams.get('scenario') !== 'reader-recovery' || fixtureReads > 1;
+        return { ok: true, complete, editable: complete, canReorder: complete, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: complete ? [] : ['The playlist read is incomplete.'], diagnostics: { empty: message.playlistId !== 'WL' } };
+      }
       if (message.type === 'PERFORMANCE') return { ok: true, entries: [{ kind: 'sort', phase: 'completed', startedAt: Date.now(), elapsedMs: 1200, stages: { load: { calls: 1, ms: 400 }, edit: { calls: 1, ms: 200 }, verification: { calls: 1, ms: 300 }, storage: { calls: 3, ms: 12 } } }] };
       if (message.type === 'SYNC_VIEW') {
         if (url.searchParams.get('scenario') === 'view-fallback') return { ok: true, updated: false };
@@ -84,6 +90,7 @@ function renderRows() {
     const thumb = document.createElement('div'); thumb.className = 'thumb'; thumb.textContent = '▶';
     const meta = document.createElement('div'); meta.className = 'meta';
     const title = document.createElement('a'); title.id = 'video-title'; title.href = `https://www.youtube.com/watch?v=${item.videoId}&list=WL&index=${index + 1}`; title.textContent = item.title;
+    if (url.searchParams.get('scenario') === 'delayed-unindexed') { title.href = `https://www.youtube.com/watch?v=${item.videoId}&list=WL`; number.textContent = ''; }
     const channel = document.createElement('div'); channel.id = 'byline-container'; channel.textContent = item.channel;
     meta.append(title, channel); row.append(number, thumb, meta); rows.append(row);
     row.addEventListener('dragstart', event => { nativeDragged = item.setVideoId; event.dataTransfer.setData('text/plain', 'native fixture drag'); });
