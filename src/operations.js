@@ -67,6 +67,23 @@ export function reorderPlan(snapshot, keys, position, beforeId) {
   return orderPlan(snapshot, desired.map(item => item.setVideoId));
 }
 
+export function sortPlan(snapshot, keys, sortBy, descending = true) {
+  const selected = new Set(exactItems(keys, snapshot).map(item => item.setVideoId));
+  if (!['title', 'channel', 'duration'].includes(sortBy)) throw new Error('Choose title, channel, or duration.');
+  if (typeof descending !== 'boolean') throw new Error('Choose ascending or descending order.');
+  // Start in playlist order so equal values stay stable regardless of click order.
+  const moving = snapshot.items.filter(item => selected.has(item.setVideoId));
+  const first = snapshot.items.findIndex(item => selected.has(item.setVideoId));
+  const consecutive = snapshot.items.slice(first, first + moving.length).every(item => selected.has(item.setVideoId));
+  const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+  const compare = sortBy === 'duration' ? (a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0) : (a, b) => collator.compare(a[sortBy] || '', b[sortBy] || '');
+  moving.sort((a, b) => (descending ? -1 : 1) * compare(a, b));
+  const desired = consecutive
+    ? [...snapshot.items.slice(0, first), ...moving, ...snapshot.items.slice(first + moving.length)]
+    : [...moving, ...snapshot.items.filter(item => !selected.has(item.setVideoId))];
+  return { ...orderPlan(snapshot, desired.map(item => item.setVideoId)), items: moving, placement: consecutive ? 'in_place' : 'top' };
+}
+
 // Preserve a longest ordered subsequence: every other occurrence moves once.
 // This is the minimum number of single-entry moves for an exact permutation.
 export function orderPlan(snapshot, desiredIds) {

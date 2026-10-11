@@ -15,7 +15,7 @@ export async function youtubeCommand(command) {
     && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value);
   const commandSchemas = {
     read: ['type', 'playlistId', 'pickerVideoId'], edit: ['type', 'playlistId', 'action', 'actions', 'expectedFingerprint'],
-    playlists: ['type', 'videoId'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
+    playlists: ['type', 'videoId'], account: ['type'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
   };
   if (!Object.hasOwn(commandSchemas, command?.type) || !ownKeys(command, commandSchemas[command.type])) {
     throw new Error('Invalid playlist command.');
@@ -62,7 +62,7 @@ export async function youtubeCommand(command) {
       || !Array.isArray(command.videoIds) || command.videoIds.length > 500 || !command.videoIds.every(videoId)) {
       throw new Error('Provide a playlist title and valid video IDs (at most 500).');
     }
-  } else if (command.type !== 'read') {
+  } else if (!['read', 'account'].includes(command.type)) {
     throw new Error('Unknown playlist command.');
   }
 
@@ -166,6 +166,12 @@ export async function youtubeCommand(command) {
     return data;
   }
 
+  if (command.type === 'account') {
+    // Queueing links only needs the current identity. The destination read and
+    // every subsequent edit still verify that identity against live playlists.
+    assertSession();
+    return { ok: true, fingerprint };
+  }
   if (command.type === 'edit') {
     const actions = command.actions || [command.action];
     const data = await request('browse/edit_playlist', { playlistId: command.playlistId, actions }, true);

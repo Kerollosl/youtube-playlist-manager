@@ -55,8 +55,36 @@ function page(responses, configOverrides = {}) {
   };
   // This verifies that Chrome's serialized function has no module closures.
   const run = vm.runInNewContext(`(${youtubeCommand.toString()})`, sandbox);
-  return { run, calls, config };
+  return { run, calls, config, document: sandbox.document };
 }
+
+test('account identity check avoids network requests and exposes no credentials', async () => {
+  const { run, calls } = page([]);
+  const result = await run({ type: 'account' });
+  assert.equal(result.ok, true);
+  assert.equal(result.fingerprint, FINGERPRINT);
+  assert.deepEqual(Object.keys(result).sort(), ['fingerprint', 'ok']);
+  assert.equal(calls.length, 0);
+});
+
+for (const missing of ['identity', 'cookie', 'signed-in session']) test(`account identity check rejects missing ${missing} before any request`, async () => {
+  const { run, calls, config, document } = page([]);
+  if (missing === 'identity') {
+    config.DATASYNC_ID = '';
+    config.INNERTUBE_CONTEXT.user = {};
+  } else if (missing === 'cookie') document.cookie = '';
+  else config.LOGGED_IN = false;
+  await assert.rejects(run({ type: 'account' }), /identity is unavailable|Sign in/);
+  assert.equal(calls.length, 0);
+});
+
+test('account identity check rejects a session switch during asynchronous hashing', async () => {
+  const { run, calls, config } = page([]);
+  const pending = run({ type: 'account' });
+  config.DATASYNC_ID = 'changed-account';
+  await assert.rejects(pending, /account changed/);
+  assert.equal(calls.length, 0);
+});
 
 test('serialized read retains duplicate occurrences and scopes continuation', async () => {
   const first = initial([row('one'), continuation('page-two')]);

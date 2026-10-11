@@ -50,7 +50,10 @@ window.chrome = {
         return { ok: true, job: { id: 'fixture-job', fingerprint: 'demo', kind: 'remove', phase: 'completed', sourceId: 'WL' } };
       }
       if (message.type === 'SORT') {
-        fixtureItems.sort((a, b) => (message.descending ? -1 : 1) * (message.sortBy === 'duration' ? a.durationSeconds - b.durationSeconds : a[message.sortBy].localeCompare(b[message.sortBy])));
+        const { sortPlan } = await import('../src/operations.js');
+        const plan = sortPlan({ complete: true, fingerprint: 'demo', items: fixtureItems }, message.keys, message.sortBy, message.descending);
+        const byId = new Map(fixtureItems.map(item => [item.setVideoId, item]));
+        fixtureItems.splice(0, fixtureItems.length, ...plan.desiredIds.map(id => byId.get(id)));
         sessionStorage.setItem('fixture-order', JSON.stringify(fixtureItems.map(item => item.setVideoId)));
         return { ok: true, job: { id: 'fixture-job', fingerprint: 'demo', kind: 'sort', phase: 'completed', sourceId: 'WL' } };
       }

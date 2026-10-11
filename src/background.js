@@ -2,7 +2,7 @@ import { youtubeCommand } from './youtube-api.js';
 import { youtubeRefresh } from './youtube-view.js';
 import { saveJob, archiveJob, hydrateJobs } from './job-store.js';
 import { measure, newTimings } from './timings.js';
-import { assertAccount, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, orderPlan, reorderItems } from './operations.js';
+import { assertAccount, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, sortPlan, reorderItems } from './operations.js';
 
 let busy = false;
 let running = null;
@@ -122,7 +122,7 @@ async function run(message) {
   }
   if (message.type === 'QUEUE_LINKS') {
     if (message.kind !== 'copy' || !Array.isArray(message.items) || !message.items.length || message.items.length > 5000 || message.items.some(item => !/^[A-Za-z0-9_-]{11}$/.test(item.videoId || ''))) throw new Error('Select valid videos to copy.');
-    const account = await api(message.tabId, { type: 'playlists', videoId: message.items[0].videoId });
+    const account = await api(message.tabId, { type: 'account' });
     const items = message.items.map((item, index) => ({ setVideoId: `link-${index}`, videoId: item.videoId, title: String(item.title || '').slice(0,500) }));
     const queue = { id: crypto.randomUUID(), kind: 'copy', sourceId: null, fingerprint: account.fingerprint, items, sourceBefore: null, savedAt: Date.now() };
     await chrome.storage.local.set({ queue });
@@ -191,12 +191,14 @@ async function run(message) {
     const archiveStoppedCopy = message.type === 'REMOVE' && activeJob?.kind === 'copy' && activeJob.phase === 'interrupted';
     if (activeJob && !archiveStoppedCopy) throw new Error('Review or stop the saved operation before starting another.');
     if (!['PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'].includes(message.type)) throw new Error('Unsupported command.');
+    if (message.type === 'TRANSFER' && message.pickerVideoId !== undefined && !validVideo(message.pickerVideoId)) throw new Error('Invalid video ID for playlist lookup.');
     const pasted = message.type === 'PASTE';
     if (pasted && !queue) throw new Error('Copy or cut videos first.');
     if (pasted && message.expectedQueueId !== queue.id) throw new Error('The saved selection changed. Review Paste again.');
     const sourceId = pasted ? queue.sourceId : message.playlistId;
     const kind = message.type === 'REMOVE' ? 'remove' : message.type === 'SORT' ? 'sort' : message.type === 'REORDER' ? 'reorder' : pasted ? queue.kind : message.kind === 'move' ? 'move' : 'copy';
     let source = null;
+    let prefetchedTarget = null;
     let items;
     let fingerprint;
     if (pasted && kind === 'copy') {
@@ -205,13 +207,25 @@ async function run(message) {
       fingerprint = queue.fingerprint;
     } else {
       if (!validPlaylist(sourceId)) throw new Error('No valid source playlist.');
-      source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint, timings);
+      if (message.type === 'TRANSFER' && validVideo(message.pickerVideoId)) {
+        if (!validPlaylist(message.targetId) || message.targetId === sourceId) throw new Error('Choose a different destination playlist.');
+        // Both preflights are fresh reads. Wait for both to settle before
+        // releasing the operation lock, even if one fails its account checks.
+        const results = await Promise.allSettled([
+          read(message.tabId, sourceId, undefined, message.expectedFingerprint, timings),
+          read(message.tabId, message.targetId, message.pickerVideoId, message.expectedFingerprint, timings)
+        ]);
+        const failure = results.find(result => result.status === 'rejected');
+        if (failure) throw failure.reason;
+        [source, prefetchedTarget] = results.map(result => result.value);
+      } else {
+        source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint, timings);
+      }
       assertAccount(source, pasted ? queue.fingerprint : message.expectedFingerprint);
       fingerprint = source.fingerprint;
       items = exactItems(pasted ? queue.items.map(item => item.setVideoId) : message.keys, source);
       if (pasted && items.some((item, i) => item.videoId !== queue.items[i].videoId)) throw new Error('Saved source videos changed.');
       if (['move', 'remove', 'sort', 'reorder'].includes(kind) && !source.editable) throw new Error('The source playlist is not editable.');
-      if (kind === 'sort' && items.length !== source.items.length) throw new Error('The playlist changed since the sort was reviewed. Refresh and try again.');
       if (['sort', 'reorder'].includes(kind) && !source.canReorder) throw new Error('YouTube does not allow this playlist to be reordered.');
     }
     let placement;
@@ -219,12 +233,16 @@ async function run(message) {
       if (JSON.stringify(message.expectedOrder) !== JSON.stringify(source.items.map(item => item.setVideoId))) throw new Error('The playlist order changed. Refresh and choose the position again.');
       placement = reorderPlan(source, message.keys, message.position, message.beforeId);
     }
+    if (kind === 'sort') {
+      if (message.expectedOrder !== undefined && JSON.stringify(message.expectedOrder) !== JSON.stringify(source.items.map(item => item.setVideoId))) throw new Error('The playlist order changed. Review sorting again.');
+      placement = sortPlan(source, message.keys, message.sortBy, message.descending);
+    }
     if (archiveStoppedCopy) await archive({ ...activeJob, phase: 'stopped' });
     job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now(), timings };
     running.jobId = job.id;
     if (kind === 'copy' || kind === 'move') {
       if (!validPlaylist(message.targetId) || message.targetId === sourceId) throw new Error('Choose a different destination playlist.');
-      const target = await read(message.tabId, message.targetId, items[0]?.videoId, fingerprint, timings);
+      const target = prefetchedTarget || await read(message.tabId, message.targetId, items[0]?.videoId, fingerprint, timings);
       assertAccount(target, fingerprint);
       if (!target.editable) throw new Error('The destination playlist is not editable.');
       job.targetId = message.targetId;
@@ -248,16 +266,11 @@ async function run(message) {
       await archive(job);
     } else {
       // Sorting is occurrence-based and never removes any video.
-      const desired = [...source.items];
-      if (!['title', 'channel', 'duration'].includes(message.sortBy)) throw new Error('Choose title, channel, or duration.');
-      const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-      const compare = message.sortBy === 'duration' ? (a, b) => (a.durationSeconds || 0) - (b.durationSeconds || 0) : (a, b) => collator.compare(a[message.sortBy] || '', b[message.sortBy] || '');
-      desired.sort((a, b) => (message.descending ? -1 : 1) * compare(a, b));
-      job.items = desired;
+      job.items = placement.items;
+      job.sortBy = message.sortBy; job.descending = message.descending ?? true; job.sortPlacement = placement.placement;
       job.phase = 'sorting';
       await save(job);
-      const plan = orderPlan(source, desired.map(item => item.setVideoId));
-      await reorderItems(job, plan, makeIO(message.tabId, job));
+      await reorderItems(job, placement, makeIO(message.tabId, job));
       job.phase = 'completed';
       await archive(job);
     }

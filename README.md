@@ -4,6 +4,7 @@ A custom Chrome extension that works directly inside YouTube. Selection controls
 
 ## Features
 
+- **History, Playlists, and Watch Later shortcuts** above You in the compact left sidebar, available even with selection mode off. Shortcuts reuse mounted native navigation entries for in-page transitions; ordinary links remain available as a fallback.
 - Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a subtle blue tint. No visible checkbox covers YouTube’s buttons; keyboard and screen-reader selection remain available.
 - Use the toolbar’s checkbox to select all, show a partial selection, or deselect all.
 - **Copy selected links** as plain text: one clean YouTube URL per line, ready to paste into NotebookLM.
@@ -13,6 +14,7 @@ A custom Chrome extension that works directly inside YouTube. Selection controls
 - An upward-opening grouped action menu clearly separates link copying, reusable playlist selections, saving, recovery, and deletion.
 - Save, move, delete, and sort with up to 50 actions per verified mutation batch.
 - Move selections to the top or bottom of their current playlist, drag them between videos, or choose a video number to place them before. Selected videos keep their existing playlist order.
+- Sort selected videos by duration, title, or channel. The default is duration descending (longest first). Consecutive selections sort within their current positions; scattered selections sort to the top while other videos keep their order. With no selection, Sort orders the whole playlist.
 - Use YouTube's light/dark colors. All controls and dialogs stay on the YouTube page.
 
 ## Install
@@ -64,6 +66,8 @@ Enable selection and choose videos, then open **More → Move in this playlist�
 Reordering uses exact playlist occurrences, journals each batch, and verifies the complete resulting order. It never removes videos or retries an uncertain move request. Switching selection off removes injected row controls and restores native draggable attributes, so YouTube's ordinary single-video moves remain available.
 
 ## Development and validation
+
+Inactive selection no longer enumerates video cards or renders the hidden toolbar. Sidebar/header changes schedule an immediate coalesced scan; feed rerenders are ignored while selection is off. Active scans reuse their row list for toolbar/menu updates, and unrelated pointer events skip drag eligibility scans. Saving an unindexed selection avoids a redundant playlist-picker request for account identity. Direct saves with a selected-video probe load fresh source and destination snapshots concurrently, while retaining account checks, exact occurrences, journaling, and verification. YouTube response time and verification retries can still dominate large playlist operations.
 
 Node.js 22 or later. No third-party runtime dependencies.
 

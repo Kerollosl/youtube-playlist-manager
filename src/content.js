@@ -31,6 +31,9 @@
   let operationStatus = { activeJob: null, queue: null, history: [], busy: false };
 
   function svg(name) {
+    if (name === 'playlists') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h14v2H3V4Zm0 5h14v2H3V9Zm0 5h8v2H3v-2Zm0 5h8v2H3v-2Zm12-6 7 4-7 4v-8Z"></path></svg>';
+    if (name === 'watchLater') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm-1 3v6l5 3 1-1.7-4-2.3V7h-2Z"></path></svg>';
+    if (name === 'history') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1-9.8 12h2.1A8 8 0 1 0 6.3 6.3L9 9H2V2l2.9 2.9A10 10 0 0 1 12 2Zm-1 5h2v5.4l4 2.3-1 1.7-5-2.9V7Z"></path></svg>';
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
     const paths = { mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.6 12 16 5.6 14.4 4 8 10.4A4 4 0 1 0 9.6 12ZM5 17a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm5.4-3L14 17.6l1.6-1.6-3.6-3.6-1.6 1.6ZM19 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]}"></path></svg>`;
@@ -111,13 +114,17 @@
     if (needsReload || !selected.size || !snapshot?.complete) return false;
     return [...selected.values()].every(item => item.setVideoId && byOccurrence.get(item.setVideoId)?.videoId === item.videoId);
   }
-  function canReorder(entries = loadedRows()) { return exactSelection() && snapshot.editable && snapshot.canReorder && entries.some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
+  function canReorder(entries) { return exactSelection() && snapshot.editable && snapshot.canReorder && (entries || loadedRows()).some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
   function selectionArgs() {
     if (!exactSelection()) throw new Error('Wait for the playlist to load, then select its videos again. Copy links works now.');
     return { playlistId: snapshot.playlistId, keys: [...selected.values()].map(item => item.setVideoId), expectedFingerprint: snapshot.fingerprint };
   }
-  function update() {
-    const count = snapshot?.complete && snapshot.playlistId === playlistId() ? snapshot.items.length : loadedRows().length;
+  function update(entries) {
+    toggleButton?.setAttribute('aria-pressed', String(enabled));
+    if (toggleButton) { toggleButton.title = enabled ? 'Exit video selection' : 'Select videos'; toggleButton.setAttribute('aria-label', toggleButton.title); }
+    // Hidden selection UI needs no video enumeration or toolbar rendering.
+    if (!enabled) return;
+    const count = snapshot?.complete && snapshot.playlistId === playlistId() ? snapshot.items.length : (entries || loadedRows()).length;
     const label = root.querySelector('.count');
     const queued = operationStatus.queue?.items?.length || 0, active = operationStatus.activeJob;
     if (!selected.size && active) label.replaceChildren(document.createTextNode(active.phase === 'ready_to_remove' ? 'Move ready' : 'Operation saved'));
@@ -145,9 +152,7 @@
     stop.hidden = !working || !active?.id || !['copying', 'removing', 'sorting', 'reordering'].includes(active.phase);
     stop.disabled = Boolean(active?.stopRequested); stop.textContent = active?.stopRequested ? 'Stopping…' : 'Stop';
     if (!stop.hidden && active?.stopRequested) label.textContent = 'Finishing current batch…';
-    toggleButton?.setAttribute('aria-pressed', String(enabled));
-    if (toggleButton) { toggleButton.title = enabled ? 'Exit video selection' : 'Select videos'; toggleButton.setAttribute('aria-label', toggleButton.title); }
-    if (!menu.hidden) buildMenu();
+    if (!menu.hidden) buildMenu(entries);
   }
   let statusRequest = null, statusRevision = 0;
   async function refreshStatus() {
@@ -178,9 +183,57 @@
       end.insertBefore(toggleButton, end.querySelector('#buttons') || end.firstChild);
     }
   }
+  const sidebarShortcuts = [
+    { key: 'history', label: 'History', href: '/feed/history' },
+    { key: 'playlists', label: 'Playlists', href: '/feed/playlists' },
+    { key: 'watchLater', label: 'Watch Later', href: '/playlist?list=WL' }
+  ];
+  function matchesSidebarTarget(href, shortcut) {
+    try {
+      const url = new URL(href, location.origin);
+      return url.origin === location.origin && (shortcut.key === 'watchLater' ? url.pathname === '/playlist' && url.searchParams.get('list') === 'WL' : url.pathname === shortcut.href);
+    } catch { return false; }
+  }
+  function mountSidebarShortcuts() {
+    // The expanded guide already supplies these links. Only extend the compact rail.
+    for (const items of document.querySelectorAll('ytd-mini-guide-renderer #items')) {
+      const nativeLinks = [...items.querySelectorAll('a[href]:not(.yt-multiselect-sidebar-link)')];
+      const you = nativeLinks.find(anchor => new URL(anchor.href, location.origin).pathname === '/feed/you')?.closest('ytd-mini-guide-entry-renderer');
+      let before = you;
+      // Insert in reverse so existing shortcuts stay in place during ordinary scans.
+      for (const shortcut of you ? [...sidebarShortcuts].reverse() : sidebarShortcuts) {
+        let link = items.querySelector(`[data-yt-multiselect-shortcut="${shortcut.key}"]`);
+        const native = nativeLinks.some(anchor => matchesSidebarTarget(anchor.href, shortcut));
+        if (native) { link?.remove(); continue; }
+        if (!link) {
+          link = element('a', '', 'yt-multiselect-sidebar-link');
+          link.dataset.ytMultiselectShortcut = shortcut.key;
+          link.href = shortcut.href;
+          link.title = shortcut.label;
+          link.setAttribute('aria-label', shortcut.label);
+          link.innerHTML = svg(shortcut.key);
+          link.append(element('span', shortcut.label));
+          link.addEventListener('click', event => {
+            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            const native = [...document.querySelectorAll('ytd-guide-renderer a[href],ytd-mini-guide-renderer a[href]:not(.yt-multiselect-sidebar-link)')].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
+            // Reuse YouTube's router when its native entry is mounted. Normal links
+            // remain the fallback, including open-in-new-tab and modified clicks.
+            if (native) { event.preventDefault(); native.click(); }
+          });
+        }
+        if (you) {
+          if (link.nextElementSibling !== before) items.insertBefore(link, before);
+          before = link;
+        } else if (!link.isConnected) items.append(link);
+        if (matchesSidebarTarget(location.href, shortcut)) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+    }
+  }
   function scan() {
     if (!host.isConnected) (document.querySelector('ytd-app') || document.documentElement).append(host);
     mountToggle();
+    mountSidebarShortcuts();
     if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); setSnapshot(null); lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
     if (!enabled) {
       for (const row of document.querySelectorAll('.yt-multiselect-row')) releaseRow(row);
@@ -220,7 +273,7 @@
       } else restoreDraggable(row);
       if (checkbox.checked) selected.set(item.key, item);
     }
-    update();
+    update(entries);
   }
   function restoreDraggable(row) {
     if (!dragAttributes.has(row)) return;
@@ -252,8 +305,8 @@
     if (value) { closePanel(); buildMenu(); refreshStatus(); if (focus) menuButtons()[0]?.focus(); }
   }
   let menuSignature = '';
-  function buildMenu() {
-    const entries = loadedRows(), exact = exactSelection(), reorderable = canReorder(entries);
+  function buildMenu(entries = loadedRows()) {
+    const exact = exactSelection(), reorderable = canReorder(entries);
     const queued = operationStatus.queue?.items?.length || 0, active = operationStatus.activeJob;
     const signature = JSON.stringify([selected.size, exact, reorderable, entries.length, needsReload, working, snapshot?.complete, snapshot?.editable, snapshot?.canReorder, snapshot?.items.length, queued, active?.id, active?.phase, operationStatus.historyCount ?? operationStatus.history?.length ?? 0]);
     // YouTube rerenders often. Keep menu buttons stable while a click is in progress.
@@ -280,7 +333,7 @@
     add('cut', 'Cut selection', editReason || 'Move only after destination copies are verified', cutDialog, Boolean(editReason));
     add('save', 'Save to playlist…', selected.size ? 'Copy the current selection' : queued ? `Continue with ${queued} saved videos` : 'Select or copy videos first', saveDialog, !selected.size && !queued && !operationStatus.activeJob);
     add('toggle', 'Move in this playlist…', editReason || (!reorderable ? 'Open a playlist that supports reordering' : 'Move the selection to the top, bottom, or a custom position'), reorderDialog, !reorderable);
-    add('all', 'Sort playlist…', 'Order the entire playlist by title, channel, or duration', sortDialog, needsReload || !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length);
+    add('all', selected.size ? 'Sort selected videos…' : 'Sort playlist…', selected.size ? `Order only the ${selected.size} selected videos` : 'Order the entire playlist by title, channel, or duration', sortDialog, needsReload || !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length || Boolean(selected.size && !exact));
     divide(); group('Saved & recovery');
     add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.historyCount ?? operationStatus.history?.length ?? 0} recent backups`, recoveryDialog);
     add('recovery', 'Performance', 'Recent action timings on this device', performanceDialog);
@@ -371,16 +424,19 @@
   }
   function sortDialog() {
     if (needsReload || !snapshot?.complete || !snapshot.editable || !snapshot.canReorder) throw new Error('Wait for an editable playlist to load.');
-    const capturedScope = scope, args = { playlistId: snapshot.playlistId, expectedFingerprint: snapshot.fingerprint, keys: snapshot.items.map(item => item.setVideoId) };
-    const body = compact('Sort playlist');
-    body.append(element('p', `Order all ${snapshot.items.length} videos. Duplicate entries are kept.`));
+    const capturedScope = scope, args = selected.size ? selectionArgs() : { playlistId: snapshot.playlistId, expectedFingerprint: snapshot.fingerprint, keys: snapshot.items.map(item => item.setVideoId) };
+    args.expectedOrder = snapshot.items.map(item => item.setVideoId);
+    const chosen = new Set(args.keys), first = snapshot.items.findIndex(item => chosen.has(item.setVideoId));
+    const consecutive = snapshot.items.slice(first, first + chosen.size).every(item => chosen.has(item.setVideoId));
+    const body = compact(selected.size ? `Sort ${chosen.size} selected ${chosen.size === 1 ? 'video' : 'videos'}` : 'Sort playlist');
+    body.append(element('p', selected.size ? consecutive ? 'Only selected videos are sorted, within their current positions.' : 'Selected videos are sorted and moved to the top. Other videos keep their order.' : `Order all ${snapshot.items.length} videos. Duplicate entries are kept.`));
     const field = (id, text, values) => {
       const label = element('label', text), select = element('select'); label.htmlFor = id; select.id = id;
       for (const [value, title] of values) { const option = element('option', title); option.value = value; select.append(option); }
       body.append(label, select); return select;
     };
-    const by = field('sort-by', 'Sort by', [['title', 'Title'], ['channel', 'Channel'], ['duration', 'Duration']]);
-    const direction = field('sort-direction', 'Order', [['ascending', 'Ascending'], ['descending', 'Descending']]);
+    const by = field('sort-by', 'Sort by', [['duration', 'Duration'], ['title', 'Title'], ['channel', 'Channel']]);
+    const direction = field('sort-direction', 'Order', [['descending', 'Descending'], ['ascending', 'Ascending']]);
     compactActions(body, 'Sort', () => { if (navigationScope() !== capturedScope) throw new Error('The playlist changed. Review sorting again.'); return operation('SORT', { ...args, sortBy: by.value, descending: direction.value === 'descending' }); });
   }
   function clearDrop() {
@@ -401,7 +457,7 @@
   function dragTarget(event) {
     const row = dragRow(event), item = row && info(row);
     if (!item?.setVideoId || groupDrag.selectedIds.has(item.setVideoId)) return null;
-    const after = event.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    const rect = row.getBoundingClientRect(), after = event.clientY > rect.top + rect.height / 2;
     let target = item;
     if (after) target = snapshot.items.slice(snapshot.items.findIndex(entry => entry.setVideoId === item.setVideoId) + 1).find(entry => !groupDrag.selectedIds.has(entry.setVideoId));
     return { row, after, placement: target ? { position: 'before', beforeId: target.setVideoId } : { position: 'bottom' } };
@@ -499,7 +555,7 @@
       if (navigationScope() !== capturedScope || !token.isConnected) return;
       const targetId = targetPlaylist(value); if (!targetId || targetId === sourceId) throw new Error('Choose a different destination playlist.');
       if (savedQueue) return operation('PASTE', { targetId, expectedQueueId: savedQueue.id });
-      if (args) return operation('TRANSFER', { ...args, kind, targetId });
+      if (args) return operation('TRANSFER', { ...args, kind, targetId, pickerVideoId: selection[0].videoId });
       const saved = await send('QUEUE_LINKS', { items: selection, kind: 'copy' });
       return operation('PASTE', { targetId, expectedQueueId: saved.queue.id });
     };
@@ -575,14 +631,14 @@
   backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDialog(); });
   document.addEventListener('click', event => { if (!event.composedPath().includes(host)) { showMenu(false); closePanel(); } });
   for (const type of ['pointerdown', 'mousedown']) document.addEventListener(type, event => {
-    if (!enabled || working || !canReorder()) return;
+    if (!enabled || working) return;
     const row = dragRow(event);
-    if (row && selected.has(info(row)?.key)) event.stopImmediatePropagation();
+    if (row && selected.has(info(row)?.key) && canReorder()) event.stopImmediatePropagation();
   }, true);
   document.addEventListener('dragstart', event => {
-    if (!enabled || working || !canReorder() || !event.dataTransfer) return;
+    if (!enabled || working || !event.dataTransfer) return;
     const row = dragRow(event);
-    if (!row || !selected.has(info(row)?.key)) return;
+    if (!row || !selected.has(info(row)?.key) || !canReorder()) return;
     const args = reorderArgs(); groupDrag = { args, selectedIds: new Set(args.keys), scope }; event.stopImmediatePropagation();
     event.dataTransfer.clearData(); event.dataTransfer.setData('text/plain', `${selected.size} selected playlist videos`); event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setDragImage(row, 24, 24); closePanel(); showMenu(false); notice('');
@@ -627,7 +683,9 @@
   });
   new MutationObserver(mutations => {
     if (mutations.every(mutation => mutation.target === host || mutation.target === toggleButton || mutation.target.closest?.('#yt-multiselect-toggle') || [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1 || node.classList?.contains('yt-multiselect-checkbox')))) return;
-    clearTimeout(timer); timer = setTimeout(scan, 120);
+    if (!enabled && !mutations.some(mutation => mutation.target.closest?.('ytd-mini-guide-renderer,ytd-masthead') || [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 && (node === host || node.matches('ytd-mini-guide-renderer,ytd-masthead') || node.querySelector('ytd-mini-guide-renderer,ytd-masthead'))))) return;
+    // Coalesce into one pending scan without postponing it through continuous renders.
+    if (!timer) timer = setTimeout(() => { timer = null; scan(); }, enabled ? 120 : 0);
   }).observe(document.body || document.documentElement, { childList: true, subtree: true });
   document.addEventListener('yt-navigate-finish', () => { closeDialog(); scan(); });
   chrome.runtime.onMessage?.addListener(message => { if (message.type === 'TOGGLE') toggle(!enabled); });

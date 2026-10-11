@@ -28,7 +28,7 @@ globalThis.chrome = {
   } },
   scripting: { executeScript: async ({ args: [command] }) => {
     if (command.type === 'read') { reads.push(clone(command)); return [{ result: readResult?.(command) ?? { ok: true, ...clone(playlists[command.playlistId]), fingerprint: fingerprints } }]; }
-    if (command.type === 'playlists') return [{ result: { ok: true, fingerprint: fingerprints, playlists: [] } }];
+    if (command.type === 'playlists' || command.type === 'account') return [{ result: { ok: true, fingerprint: fingerprints, playlists: [] } }];
     assert.equal(command.expectedFingerprint, fingerprints);
     mutationRequests.push(clone(command));
     for (const action of command.actions || [command.action]) {
@@ -121,7 +121,86 @@ test('page selection can be saved and pasted without any removal source', async 
   assert.ok(edits.every(edit => edit.action.action === 'ACTION_ADD_VIDEO'));
 });
 
- test('paste refuses a different clipboard than the one reviewed', async () => {
+test('queueing page links checks current identity without another playlist picker request', async () => {
+  reset();
+  const original = chrome.scripting.executeScript, commands = [];
+  chrome.scripting.executeScript = async input => { commands.push(clone(input.args[0])); return original(input); };
+  try {
+    const queued = await send({ type: 'QUEUE_LINKS', kind: 'copy', items: [item] });
+    assert.equal(queued.ok, true, queued.error);
+    assert.deepEqual(commands.map(command => command.type), ['account']);
+    assert.equal(data.queue.fingerprint, fingerprints);
+    fingerprints = 'different-account';
+    const pasted = await send({ type: 'PASTE', targetId: 'PLtarget', expectedQueueId: data.queue.id });
+    assert.equal(pasted.ok, false);
+    assert.match(pasted.error, /account changed/);
+    assert.equal(edits.length, 0);
+  } finally { chrome.scripting.executeScript = original; }
+});
+
+test('failed account check leaves the previous queued selection intact', async () => {
+  reset(); data.queue = { id: 'previous', items: [item] };
+  const original = chrome.scripting.executeScript;
+  chrome.scripting.executeScript = async input => input.args[0].type === 'account'
+    ? [{ result: { ok: false, error: 'Sign in to YouTube before managing playlists.' } }] : original(input);
+  try {
+    const result = await send({ type: 'QUEUE_LINKS', kind: 'copy', items: [item] });
+    assert.equal(result.ok, false);
+    assert.match(result.error, /Sign in/);
+    assert.equal(data.queue.id, 'previous');
+    assert.equal(edits.length, 0);
+  } finally { chrome.scripting.executeScript = original; }
+});
+
+test('direct transfer starts both fresh preflight reads before editing', { timeout: 2000 }, async () => {
+  reset();
+  const original = chrome.scripting.executeScript, releases = new Map();
+  let started;
+  const bothStarted = new Promise(resolve => { started = resolve; });
+  chrome.scripting.executeScript = async input => {
+    const command = input.args[0];
+    if (command.type === 'read' && !edits.length) {
+      await new Promise(resolve => { releases.set(command.playlistId, resolve); if (releases.size === 2) started(); });
+    }
+    return original(input);
+  };
+  const operation = send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget', pickerVideoId: item.videoId });
+  try {
+    await bothStarted;
+    assert.equal(edits.length, 0);
+    releases.get('PLtarget')();
+    await Promise.resolve();
+    assert.equal(edits.length, 0);
+    releases.get('WL')();
+    const result = await operation;
+    assert.equal(result.ok, true, result.error);
+    assert.equal(mutationRequests.length, 1);
+    assert.equal(reads.filter(command => command.playlistId === 'PLtarget').length, 2);
+    assert.ok(reads.filter(command => command.playlistId === 'PLtarget').every(command => command.pickerVideoId === item.videoId));
+  } finally { for (const release of releases.values()) release(); chrome.scripting.executeScript = original; }
+});
+
+for (const changed of ['WL', 'PLtarget']) test(`parallel preflight rejects changed account in ${changed} before edits`, async () => {
+  reset();
+  readResult = command => ({ ok: true, ...clone(playlists[command.playlistId]), fingerprint: command.playlistId === changed ? 'different-account' : fingerprints });
+  const result = await send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget', pickerVideoId: item.videoId });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /account changed/);
+  assert.equal(reads.length, 2);
+  assert.equal(edits.length, 0);
+  assert.equal(data.activeJob, undefined);
+});
+
+test('invalid transfer picker probe rejects before either preflight read', async () => {
+  reset();
+  const result = await send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget', pickerVideoId: 'invalid' });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Invalid video ID/);
+  assert.equal(reads.length, 0);
+  assert.equal(edits.length, 0);
+});
+
+test('paste refuses a different clipboard than the one reviewed', async () => {
   reset();
   await send({ type: 'QUEUE', kind: 'copy', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints });
   const reviewedId = data.queue.id;
@@ -361,7 +440,7 @@ test('sort batches a reverse playlist and keeps every duplicate occurrence', asy
   reset();
   playlists.WL.items = Array.from({ length: 101 }, (_, index) => ({ ...item, setVideoId: `entry-${index}`, title: String(100 - index).padStart(3, '0') }));
   const keys = playlists.WL.items.map(entry => entry.setVideoId);
-  const result = await send({ type: 'SORT', playlistId: 'WL', keys, expectedFingerprint: fingerprints, sortBy: 'title' });
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys, expectedFingerprint: fingerprints, sortBy: 'title', descending: false });
   assert.equal(result.ok, true, result.error);
   assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), [...keys].reverse());
   assert.deepEqual(mutationRequests.map(request => request.actions.length), [50, 50]);
@@ -373,6 +452,30 @@ test('already sorted playlist completes without mutation or redundant reread', a
   reset();
   const result = await send({ type: 'SORT', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, sortBy: 'title' });
   assert.equal(result.ok, true, result.error); assert.equal(edits.length, 0); assert.equal(reads.length, 1);
+});
+for (const scattered of [false, true]) test(`sort only selected occurrences ${scattered ? 'at the top when scattered' : 'in place when consecutive'}`, async () => {
+  reset();
+  playlists.WL.items = ['Other Z', 'B', 'A', 'C', 'Other A'].map((title, index) => ({ ...item, title, setVideoId: `entry-${index}` }));
+  const original = playlists.WL.items.map(entry => entry.setVideoId);
+  const keys = scattered ? ['entry-3', 'entry-1'] : ['entry-3', 'entry-1', 'entry-2'];
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys, expectedOrder: original, expectedFingerprint: fingerprints, sortBy: 'title' });
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), scattered
+    ? ['entry-3', 'entry-1', 'entry-0', 'entry-2', 'entry-4']
+    : ['entry-0', 'entry-3', 'entry-1', 'entry-2', 'entry-4']);
+  assert.equal(result.job.items.length, keys.length);
+  assert.equal(result.job.descending, true);
+  assert.deepEqual(result.job.sourceBefore.items.map(entry => entry.setVideoId), original);
+  assert.ok(edits.every(edit => edit.action.action === 'ACTION_MOVE_VIDEO_AFTER'));
+});
+test('sort rejects changed playlist order before editing or saving a job', async () => {
+  reset();
+  playlists.WL.items = [item, { ...item, setVideoId: 'two', title: 'Second' }];
+  const result = await send({ type: 'SORT', playlistId: 'WL', keys: ['one'], expectedOrder: ['two', 'one'], expectedFingerprint: fingerprints, sortBy: 'title' });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /order changed/);
+  assert.equal(edits.length, 0);
+  assert.equal(data.activeJob, undefined);
 });
 test('routine status omits immutable backups; detailed recovery keeps their exact contents', async () => {
   reset();
