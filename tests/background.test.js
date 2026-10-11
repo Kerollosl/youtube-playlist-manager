@@ -10,6 +10,7 @@ const item = { setVideoId: 'one', videoId: 'abcdefghijk', title: 'One', index: 0
 let playlists;
 let readResult;
 const clone = value => structuredClone(value);
+const payload = (record, field) => record.payloadRefs?.[field] ? data[record.payloadRefs[field]] : record[field];
 function reset() {
   data = {}; edits = []; reads = []; mutationRequests = []; fingerprints = 'account-a'; readResult = null;
   playlists = {
@@ -292,6 +293,7 @@ for (const identity of ['missing account', 'wrong playlist']) {
   readResult = command => command.playlistId === 'WL' && edits.length && stale++ < 2 ? { ok: true, ...original } : undefined;
   const result = await send({ type: 'REMOVE', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints });
   assert.equal(result.ok, true); assert.equal(edits.length, 1); assert.equal(playlists.WL.items.length, 0);
+  assert.equal(data.performanceLog[0].stages.verification_wait.calls, 2);
  });
 for (const problem of ['wrong job', 'removal started', 'batch removal started', 'extra copies']) test(`copy recheck rejects ${problem}`, async () => {
   reset(); pendingCopy('move'); playlists.PLtarget.items.push({ ...item, setVideoId: 'copy-one' });
@@ -311,8 +313,8 @@ test('finish move uses the current source snapshot and preserves newly added vid
   const result = await send({ type: 'FINISH_MOVE', jobId: copied.job.id });
   assert.equal(result.ok, true);
   assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), ['unrelated']);
-  assert.equal(data.history[0].sourceBefore.items.length, 1);
-  assert.equal(data.history[0].removalBefore.items.length, 2);
+  assert.equal(payload(data.history[0], 'sourceBefore').items.length, 1);
+  assert.equal(payload(data.history[0], 'removalBefore').items.length, 2);
 });
 
 for (const change of ['missing', 'replaced']) test(`finish move stops before mutation when a source occurrence is ${change}`, async () => {
@@ -338,7 +340,7 @@ test('reorder selection uses one batch, keeps all occurrences, and archives the 
   assert.equal(mutationRequests[0].actions.length, 2);
   assert.equal(reads.length, 2);
   assert.equal(data.activeJob, null);
-  assert.deepEqual(data.history[0].sourceBefore.items.map(entry => entry.setVideoId), expectedOrder);
+  assert.deepEqual(payload(data.history[0], 'sourceBefore').items.map(entry => entry.setVideoId), expectedOrder);
 });
 
 for (const problem of ['stale order', 'not editable', 'cannot reorder', 'selected target', 'account']) test(`reorder rejects ${problem} before any request`, async () => {
@@ -364,7 +366,7 @@ test('sort batches a reverse playlist and keeps every duplicate occurrence', asy
   assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), [...keys].reverse());
   assert.deepEqual(mutationRequests.map(request => request.actions.length), [50, 50]);
   assert.equal(reads.length, 3); // fresh source + one exact verification per batch
-  assert.equal(data.history[0].sourceBefore.items.length, 101);
+  assert.equal(payload(data.history[0], 'sourceBefore').items.length, 101);
   assert.equal(data.history[0].phase, 'completed');
 });
 test('already sorted playlist completes without mutation or redundant reread', async () => {
@@ -393,4 +395,100 @@ test('natural descending sort preserves the source order of equal titles', async
   const result = await send({ type: 'SORT', playlistId: 'WL', keys: playlists.WL.items.map(entry => entry.setVideoId), expectedFingerprint: fingerprints, sortBy: 'title', descending: true });
   assert.equal(result.ok, true, result.error);
   assert.deepEqual(playlists.WL.items.map(entry => entry.setVideoId), ['entry-2', 'entry-0', 'entry-1', 'entry-3']);
+});
+
+test('stop during an edit verifies that batch and never sends the next batch', async () => {
+  reset();
+  playlists.WL.items = Array.from({ length: 51 }, (_, i) => ({ ...item, setVideoId: `entry-${i}` }));
+  const original = chrome.scripting.executeScript;
+  let release, began;
+  const started = new Promise(resolve => { began = resolve; });
+  const gate = new Promise(resolve => { release = resolve; });
+  chrome.scripting.executeScript = async input => {
+    const response = await original(input);
+    if (input.args[0].type === 'edit') { began(); await gate; }
+    return response;
+  };
+  try {
+    const operation = send({ type: 'TRANSFER', playlistId: 'WL', keys: playlists.WL.items.map(entry => entry.setVideoId), expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+    await started;
+    const stopped = await send({ type: 'STOP', jobId: data.activeJob.id });
+    assert.equal(stopped.ok, true); release();
+    const result = await operation;
+    assert.equal(result.stopped, true); assert.equal(result.job.phase, 'stopped');
+    assert.equal(result.job.copied.length, 50); assert.equal(result.job.intent, null);
+    assert.equal(mutationRequests.length, 1); assert.equal(playlists.WL.items.length, 51);
+    const stored = await send({ type: 'STATUS', detailed: true });
+    assert.equal(stored.activeJob.sourceBefore.items.length, 51);
+    assert.equal(stored.activeJob.items.length, 51);
+    assert.equal((await send({ type: 'STOP', jobId: data.activeJob.id })).ok, false);
+  } finally { release(); chrome.scripting.executeScript = original; }
+});
+test('stop cannot turn an unverified batch into a successful stop', async () => {
+  reset();
+  const original = chrome.scripting.executeScript;
+  chrome.scripting.executeScript = async input => {
+    const response = await original(input);
+    if (input.args[0].type === 'edit') {
+      await send({ type: 'STOP', jobId: data.activeJob.id });
+      fingerprints = 'changed-account';
+    }
+    return response;
+  };
+  try {
+    const result = await send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+    assert.equal(result.ok, false); assert.equal(data.activeJob.phase, 'interrupted');
+    assert.equal(data.activeJob.intent.kind, 'add_batch'); assert.equal(mutationRequests.length, 1);
+  } finally { chrome.scripting.executeScript = original; }
+});
+test('performance stores bounded measured stages without playlist contents', async () => {
+  reset();
+  await send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+  const report = await send({ type: 'PERFORMANCE' }), timing = report.entries[0];
+  assert.equal(timing.kind, 'copy'); assert.equal(timing.phase, 'completed');
+  assert.equal(timing.stages.load.calls, 2); assert.equal(timing.stages.edit.calls, 1);
+  assert.equal(timing.stages.verification.calls, 1); assert.equal(timing.stages.storage.calls, 5);
+  assert.ok(timing.elapsedMs >= 0);
+  assert.equal(JSON.stringify(report).includes(item.videoId), false);
+  assert.equal((await send({ type: 'STOP', jobId: 'wrong' })).ok, false);
+});
+test('stop before the first batch performs no edits and retains the backup', async () => {
+  reset();
+  const original = chrome.storage.local.set;
+  chrome.storage.local.set = async update => {
+    await original(update);
+    if (update.activeJob?.phase === 'copying' && !update.activeJob.intent) await send({ type: 'STOP', jobId: update.activeJob.id });
+  };
+  try {
+    const result = await send({ type: 'TRANSFER', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+    assert.equal(result.stopped, true); assert.equal(edits.length, 0);
+    assert.equal(payload(data.activeJob, 'sourceBefore').items.length, 1);
+  } finally { chrome.storage.local.set = original; }
+});
+test('stale finish request preserves a pending move, and a new finish clears its old stop flag', async () => {
+  reset();
+  await send({ type: 'TRANSFER', kind: 'move', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, targetId: 'PLtarget' });
+  data.activeJob.stopRequested = true;
+  const before = clone(data.activeJob);
+  const stale = await send({ type: 'FINISH_MOVE', jobId: 'stale' });
+  assert.equal(stale.ok, false); assert.deepEqual(data.activeJob, before);
+  const result = await send({ type: 'FINISH_MOVE', jobId: data.activeJob.id });
+  assert.equal(result.ok, true, result.error); assert.equal(result.job.stopRequested, false);
+});
+test('view reconciliation checks the saved account and uses a fresh read without edits', async () => {
+  reset();
+  const done = await send({ type: 'SORT', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints, sortBy: 'title' });
+  const original = chrome.scripting.executeScript;
+  let injected = 0;
+  chrome.scripting.executeScript = async input => {
+    if (input.func.name === 'youtubeRefresh') { injected++; assert.equal(input.args[0].after.playlistId, 'WL'); return [{ result: { updated: true } }]; }
+    return original(input);
+  };
+  try {
+    const wrong = await send({ type: 'SYNC_VIEW', jobId: done.job.id, playlistId: 'WL', expectedFingerprint: 'other' });
+    assert.equal(wrong.updated, false); assert.equal(injected, 0);
+    const synced = await send({ type: 'SYNC_VIEW', jobId: done.job.id, playlistId: 'WL', expectedFingerprint: fingerprints });
+    assert.equal(synced.updated, true); assert.equal(synced.snapshot.items.length, 1);
+    assert.equal(injected, 1); assert.equal(edits.length, 0);
+  } finally { chrome.scripting.executeScript = original; }
 });

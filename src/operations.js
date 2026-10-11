@@ -102,6 +102,7 @@ export async function reorderItems(job, plan, io) {
   job.plannedMoves = plan.actions.length;
   job.desiredIds = plan.desiredIds;
   for (const batch of chunks(plan.actions)) {
+    await io.beforeBatch?.();
     const expected = [...current];
     for (const action of batch) {
       expected.splice(expected.indexOf(action.setVideoId), 1);
@@ -137,6 +138,7 @@ export async function copyItems(job, io) {
   const baseline = counts(job.targetBefore.items);
   let processed = 0;
   for (const batch of chunks(job.items)) {
+    await io.beforeBatch?.();
     const beforeAdded = counts(job.items.slice(0, processed));
     const expectedAdded = counts(job.items.slice(0, processed + batch.length));
     const actions = batch.map(item => ({ action: 'ACTION_ADD_VIDEO', addedVideoId: item.videoId }));
@@ -182,6 +184,7 @@ export async function removeItems(job, io, verifiedDestination, verifiedSource =
   const original = verifiedSource.items;
   let processed = 0;
   for (const batch of chunks(job.items)) {
+    await io.beforeBatch?.();
     if (job.kind === 'move') assertCopied(job, processed === 0 && verifiedDestination ? verifiedDestination : await io.read(job.targetId));
     const beforeRemoved = new Set(job.items.slice(0, processed).map(item => item.setVideoId));
     const removed = new Set(job.items.slice(0, processed + batch.length).map(item => item.setVideoId));

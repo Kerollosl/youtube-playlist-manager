@@ -555,3 +555,7 @@ button svg {
     margin-inline:auto;
   }
 }
+
+/* Keep stop available while compacting secondary actions during a batch. */
+.bar[aria-busy=true] .copy,.bar[aria-busy=true] .save{display:none}
+.stop{min-width:64px;flex-shrink:0}

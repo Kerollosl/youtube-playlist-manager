@@ -11,6 +11,7 @@
     <button class="icon" data-action="all" role="checkbox" aria-checked="false" title="Select all" aria-label="Select all">${svg('clear')}</button>
     <span class="count" aria-live="polite">0 selected</span>
     <div class="toolbar-actions">
+      <button class="text stop" data-action="stop" title="Stop after the current batch is verified" aria-label="Stop after current batch" hidden>Stop</button>
       <button class="text save primary" data-action="save" title="Save to playlist" aria-label="Save to playlist">${svg('save')}<span>Save</span></button>
       <button class="text copy" data-action="links" title="Copy selected video links as plain text" aria-label="Copy links">${svg('link')}<span>Copy links</span></button>
       <button class="icon" data-action="menu" title="More actions" aria-label="More actions" aria-haspopup="menu" aria-expanded="false">${svg('more')}</button>
@@ -105,7 +106,7 @@
     selected.clear(); for (const [key, item] of migrated) selected.set(key, item);
   }
   function exactSelection() {
-    if (!selected.size || !snapshot?.complete) return false;
+    if (needsReload || !selected.size || !snapshot?.complete) return false;
     return [...selected.values()].every(item => item.setVideoId && byOccurrence.get(item.setVideoId)?.videoId === item.videoId);
   }
   function canReorder(entries = loadedRows()) { return exactSelection() && snapshot.editable && snapshot.canReorder && entries.some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
@@ -134,10 +135,14 @@
     const progress = root.querySelector('.progress'); progress.hidden = !(working || operationStatus.busy);
     const removing = active?.phase === 'removing', reordering = ['sorting', 'reordering'].includes(active?.phase);
     const done = removing ? active.removed?.length || 0 : reordering ? active.reordered?.length || 0 : active?.copied?.length || 0;
-    const total = reordering ? active.plannedMoves : active?.items?.length;
+    const total = reordering ? active.plannedMoves : active?.itemCount ?? active?.items?.length;
     progress.dataset.indeterminate = String(!total);
     progress.style.setProperty('--progress', `${total ? Math.min(100, 100 * done / total) : 0}%`);
     if (working && active) label.textContent = `${removing ? 'Removing' : reordering ? 'Ordering' : 'Saving'} ${done}${total ? ` / ${total}` : '…'}`;
+    const stop = root.querySelector('[data-action=stop]');
+    stop.hidden = !working || !active?.id || !['copying', 'removing', 'sorting', 'reordering'].includes(active.phase);
+    stop.disabled = Boolean(active?.stopRequested); stop.textContent = active?.stopRequested ? 'Stopping…' : 'Stop';
+    if (!stop.hidden && active?.stopRequested) label.textContent = 'Finishing current batch…';
     toggleButton?.setAttribute('aria-pressed', String(enabled));
     if (toggleButton) { toggleButton.title = enabled ? 'Exit video selection' : 'Select videos'; toggleButton.setAttribute('aria-label', toggleButton.title); }
     if (!menu.hidden) buildMenu();
@@ -281,10 +286,11 @@
     const queued = operationStatus.queue?.items?.length || 0;
     add('save', 'Save to playlist…', selected.size ? 'Copy the current selection' : queued ? `Continue with ${queued} saved videos` : 'Select or copy videos first', saveDialog, !selected.size && !queued && !operationStatus.activeJob);
     add('toggle', 'Move in this playlist…', 'Move the selection to the top, bottom, or a custom position', reorderDialog, !canReorder());
-    add('all', 'Sort playlist…', 'Order the entire playlist by title, channel, or duration', sortDialog, !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length);
+    add('all', 'Sort playlist…', 'Order the entire playlist by title, channel, or duration', sortDialog, needsReload || !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length);
     divide(); group('Saved & recovery');
     const active = operationStatus.activeJob;
     add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.historyCount ?? operationStatus.history?.length ?? 0} recent backups`, recoveryDialog);
+    add('recovery', 'Performance', 'Recent action timings on this device', performanceDialog);
     add('trash', 'Delete from playlist…', 'Review titles before permanent removal', deleteSelected, !exactSelection() || !snapshot?.editable, true);
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
@@ -370,7 +376,7 @@
     });
   }
   function sortDialog() {
-    if (!snapshot?.complete || !snapshot.editable || !snapshot.canReorder) throw new Error('Wait for an editable playlist to load.');
+    if (needsReload || !snapshot?.complete || !snapshot.editable || !snapshot.canReorder) throw new Error('Wait for an editable playlist to load.');
     const capturedScope = scope, args = { playlistId: snapshot.playlistId, expectedFingerprint: snapshot.fingerprint, keys: snapshot.items.map(item => item.setVideoId) };
     const body = compact('Sort playlist');
     body.append(element('p', `Order all ${snapshot.items.length} videos. Duplicate entries are kept.`));
@@ -423,6 +429,33 @@
     listVideos(body, [...selected.values()]);
     compactActions(body, `Delete ${count}`, () => { if (navigationScope() !== capturedScope) throw new Error('The playlist changed. Select videos again.'); return operation('REMOVE', args); }, true);
   }
+  async function stopOperation() {
+    const id = operationStatus.activeJob?.id;
+    if (!working || !id) return;
+    await send('STOP', { jobId: id });
+    if (operationStatus.activeJob?.id === id) operationStatus.activeJob.stopRequested = true;
+    update();
+  }
+  async function syncView(job) {
+    const capturedScope = scope, capturedUrl = location.href;
+    const left = scrollX, top = scrollY;
+    try {
+      const result = await send('SYNC_VIEW', { jobId: job.id, playlistId: playlistId(), expectedFingerprint: job.fingerprint });
+      if (!enabled || scope !== capturedScope || location.href !== capturedUrl) return false;
+      if (!result.updated || !result.snapshot?.complete) throw new Error('Refresh needed');
+      setSnapshot(result.snapshot); needsReload = false;
+      for (const [key, item] of selected) if (!byOccurrence.has(item.setVideoId)) selected.delete(key);
+      reconcileSnapshot(); scan();
+      window.scrollTo({ left, top, behavior: 'instant' });
+      return true;
+    } catch {
+      if (enabled && scope === capturedScope && location.href === capturedUrl) {
+        needsReload = true; scan();
+        refreshNotice('Changes are saved. Refresh to update this playlist’s display.');
+      }
+      return false;
+    }
+  }
   async function operation(type, args) {
     if (working) throw new Error('Wait for the current step to finish.');
     const operationScope = scope; working = true; closeDialog(); closePanel(); showMenu(false); syncRows(); announce('Working…');
@@ -437,13 +470,30 @@
         catch { if (enabled && navigationScope() === operationScope) pendingReview(activeJob); return; }
       }
       if (!enabled || navigationScope() !== operationScope) return result;
-      if (result.job?.phase === 'ready_to_remove') moveReview(result.job);
-      else {
-        deselect(); announce(type === 'REMOVE' ? 'Videos deleted from playlist.' : type === 'FINISH_MOVE' ? 'Videos moved.' : ['REORDER', 'SORT'].includes(type) ? 'Playlist order updated.' : 'Videos saved.');
-        if ((['REMOVE', 'FINISH_MOVE', 'REORDER', 'SORT'].includes(type) && result.job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId())) location.reload();
-      }
+      const job = result.job;
+      const affectsCurrent = (['REMOVE', 'FINISH_MOVE', 'REORDER', 'SORT'].includes(type) && job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId());
+      const updated = !affectsCurrent || await syncView(job);
+      if (result.stopped) {
+        if (updated) notice(`Stopped. ${job.removed?.length || job.reordered?.length || job.copied?.length || 0} changes verified.`, 'Review', recoveryDialog, true);
+      } else if (job?.phase === 'ready_to_remove') moveReview(job);
+      else if (updated) announce(type === 'REMOVE' ? 'Videos deleted from playlist.' : type === 'FINISH_MOVE' ? 'Videos moved.' : ['REORDER', 'SORT'].includes(type) ? 'Playlist order updated.' : 'Videos saved.');
       return result;
     } finally { working = false; refreshStatus(); syncRows(); }
+  }
+  async function performanceDialog() {
+    const { entries } = await send('PERFORMANCE'), body = dialog('Performance');
+    body.append(element('p', 'Recent timings on this device. Stage totals may overlap when reads run together.', 'note'));
+    if (!entries?.length) body.append(element('p', 'Run a playlist action to see its timings here.'));
+    const names = { load: 'Playlist loading', edit: 'YouTube edits', verification: 'Verification', verification_wait: 'Verification waiting', storage: 'Checkpoint storage', throttle: 'Request spacing', view: 'Page update' };
+    for (const entry of entries || []) {
+      const card = element('div', '', 'saved');
+      card.append(element('strong', `${entry.kind} · ${(entry.elapsedMs / 1000).toFixed(2)} s`));
+      card.append(element('small', `${new Date(entry.startedAt).toLocaleString()} · ${entry.phase}`));
+      for (const [stage, metric] of Object.entries(entry.stages || {})) card.append(element('small', `${names[stage] || stage}: ${(metric.ms / 1000).toFixed(2)} s · ${metric.calls} ${metric.calls === 1 ? 'call' : 'calls'}`));
+      body.append(card);
+    }
+    body.append(button('Download timings', () => download('youtube-operation-timings.json', JSON.stringify(entries || [], null, 2))));
+    footer(body);
   }
   async function transferDialog(kind, savedQueue = null) {
     const selection = savedQueue ? [...savedQueue.items] : [...selected.values()]; if (!selection.length) return;
@@ -513,6 +563,7 @@
           removedOriginals: job.removed?.length || 0, error: job.error,
           pendingBatch: ['add_batch', 'remove_batch', 'reorder_batch'].includes(job.intent?.kind) ? { kind: job.intent.kind, size: job.intent.batchSize } : null,
           reorderedVideos: job.reordered?.length || 0,
+          timings: job.timings, stopRequested: job.stopRequested,
           lastCopyCheck: job.verification, finalCopyCheck: job.finalVerification }, null, 2);
         details.append(element('summary', 'Technical details'), output); card.append(details);
       }
@@ -525,7 +576,7 @@
     footer(body);
   }
 
-  const actions = { close: () => toggle(false), all: () => root.querySelector('[data-action=all]').getAttribute('aria-checked') === 'true' ? deselect() : selectAll(), save: saveDialog, clear: deselect, links: () => copyLinks(), menu: () => showMenu(menu.hidden) };
+  const actions = { stop: stopOperation, close: () => toggle(false), all: () => root.querySelector('[data-action=all]').getAttribute('aria-checked') === 'true' ? deselect() : selectAll(), save: saveDialog, clear: deselect, links: () => copyLinks(), menu: () => showMenu(menu.hidden) };
   root.addEventListener('click', event => { const action = event.target.closest?.('[data-action]')?.dataset.action; if (action) Promise.resolve().then(actions[action]).catch(report); });
   backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDialog(); });
   document.addEventListener('click', event => { if (!event.composedPath().includes(host)) { showMenu(false); closePanel(); } });

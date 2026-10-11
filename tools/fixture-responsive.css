@@ -9,3 +9,5 @@ html[data-fixture-theme=light] .summary p,html[data-fixture-theme=light] #byline
 /* Match the persistent native masthead while testing scrolling and rerenders. */
 ytd-masthead{position:sticky;top:0;z-index:2100;background:var(--yt-spec-base-background)}
 #results{overflow-wrap:anywhere;white-space:pre-wrap}
+
+ytd-playlist-video-list-renderer{display:block}

@@ -12,10 +12,17 @@ const storageListeners = [];
 window.chrome = {
   runtime: {
     getURL: path => new URL('../' + path, location.href).href,
-    getManifest: () => ({ version: '1.5.0' }),
+    getManifest: () => ({ version: '1.6.0' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
       if (message.type === 'READ') return { ok: true, complete: true, editable: true, canReorder: true, playlistId: message.playlistId, title: message.playlistId === 'WL' ? 'Watch later' : 'Research notes', fingerprint: 'demo', items: message.playlistId === 'WL' ? structuredClone(fixtureItems) : [], pages: 1, warnings: [], diagnostics: { empty: message.playlistId !== 'WL' } };
+      if (message.type === 'PERFORMANCE') return { ok: true, entries: [{ kind: 'sort', phase: 'completed', startedAt: Date.now(), elapsedMs: 1200, stages: { load: { calls: 1, ms: 400 }, edit: { calls: 1, ms: 200 }, verification: { calls: 1, ms: 300 }, storage: { calls: 3, ms: 12 } } }] };
+      if (message.type === 'SYNC_VIEW') {
+        if (url.searchParams.get('scenario') === 'view-fallback') return { ok: true, updated: false };
+        renderRows();
+        return { ok: true, updated: true, snapshot: { complete: true, playlistId: 'WL', fingerprint: 'demo', editable: true, canReorder: true, items: structuredClone(fixtureItems) } };
+      }
+      if (message.type === 'STOP') { window.fixtureStop = true; return { ok: true, stopping: true }; }
       if (message.type === 'STATUS') return { ok: true, ...structuredClone(fixtureStorage), busy: false };
       if (message.type === 'QUEUE' || message.type === 'QUEUE_LINKS') {
         fixtureStorage.queue = { id: crypto.randomUUID(), kind: message.kind, sourceId: 'WL', items: message.items || fixtureItems.filter(item => message.keys.includes(item.setVideoId)), savedAt: Date.now() };
@@ -31,18 +38,31 @@ window.chrome = {
         return { ok: true, job };
       }
       if (message.type === 'PLAYLISTS') return { ok: true, playlists: [{ playlistId: 'PLdemo', title: 'Research notes' }] };
+      if (message.type === 'REMOVE') {
+        const keys = new Set(message.keys);
+        fixtureItems.splice(0, fixtureItems.length, ...fixtureItems.filter(item => !keys.has(item.setVideoId)));
+        return { ok: true, job: { id: 'fixture-job', fingerprint: 'demo', kind: 'remove', phase: 'completed', sourceId: 'WL' } };
+      }
       if (message.type === 'SORT') {
         fixtureItems.sort((a, b) => (message.descending ? -1 : 1) * (message.sortBy === 'duration' ? a.durationSeconds - b.durationSeconds : a[message.sortBy].localeCompare(b[message.sortBy])));
         sessionStorage.setItem('fixture-order', JSON.stringify(fixtureItems.map(item => item.setVideoId)));
-        return { ok: true, job: { kind: 'sort', phase: 'completed', sourceId: 'WL' } };
+        return { ok: true, job: { id: 'fixture-job', fingerprint: 'demo', kind: 'sort', phase: 'completed', sourceId: 'WL' } };
       }
       if (message.type === 'REORDER') {
+        if (url.searchParams.get('scenario') === 'stop') {
+          const job = { id: 'fixture-job', fingerprint: 'demo', kind: 'reorder', phase: 'reordering', itemCount: message.keys.length, reordered: [], plannedMoves: 2, sourceId: 'WL' };
+          fixtureStorage.activeJob = job; storageListeners.forEach(listener => listener({ activeJob: { newValue: job } }, 'local'));
+          while (!window.fixtureStop) await new Promise(resolve => setTimeout(resolve, 10));
+          job.phase = 'stopped'; job.reordered = ['one'];
+          storageListeners.forEach(listener => listener({ activeJob: { newValue: job } }, 'local'));
+          return { ok: true, stopped: true, job };
+        }
         const selected = new Set(message.keys), moving = fixtureItems.filter(item => selected.has(item.setVideoId)), remaining = fixtureItems.filter(item => !selected.has(item.setVideoId));
         const index = message.position === 'top' ? 0 : message.position === 'bottom' ? remaining.length : remaining.findIndex(item => item.setVideoId === message.beforeId);
         if (index < 0) return { ok: false, error: 'Choose an unselected target.' };
         fixtureItems.splice(0, fixtureItems.length, ...remaining.slice(0, index), ...moving, ...remaining.slice(index));
         sessionStorage.setItem('fixture-order', JSON.stringify(fixtureItems.map(item => item.setVideoId)));
-        return { ok: true, job: { kind: 'reorder', phase: 'completed', sourceId: 'WL' } };
+        return { ok: true, job: { id: 'fixture-job', fingerprint: 'demo', kind: 'reorder', phase: 'completed', sourceId: 'WL' } };
       }
       return { ok: false, error: 'Live changes are disabled in this synthetic fixture.' };
     }

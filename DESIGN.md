@@ -25,3 +25,13 @@ Group dragging moves exact selected occurrences in their existing order, with a 
 ## Data boundaries
 
 UI optimization does not weaken the worker’s account binding, completeness checks, exact occurrence IDs, durable mutation journal, or destination-before-removal checks. Routine status omits immutable snapshots and history records; detailed recovery explicitly loads complete backups. Sorting and group reordering use the minimum entry moves and verifies full order and membership after each bounded batch. Unknown mutation outcomes are never automatically replayed.
+
+## Checkpoints, stopping, and page updates
+
+Immutable operation payloads live under separate storage keys. Active and archived records contain references; checkpoints carry progress and intent. Recovery explicitly reconstructs complete backups. Legacy inline records remain supported.
+
+During a batch, secondary toolbar actions give way to Stop. It requests a stop at the next verified boundary, then becomes Stopping while the current batch finishes. Unknown outcomes retain the recovery journal and are not labeled successful stops.
+
+After a verified change, the worker reads the current playlist and attempts to update YouTube's native renderer model. Known models preserve the page, scroll position, and surviving selected occurrence IDs. Unrecognized or incomplete models leave a persistent Refresh action and disable stale editing instead of automatically reloading. New destination rows require this fallback because their native renderers are unavailable.
+
+Performance is a supporting More-menu dialog. It shows recent elapsed and per-stage times with a downloadable JSON report. Logs are bounded to twenty entries and contain only timing and operation metadata.

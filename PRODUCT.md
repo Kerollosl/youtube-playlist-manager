@@ -13,3 +13,7 @@ The toolbar shows a mixed-state selection checkbox, count, Save, Copy links, Mor
 Mode: Operate. Desktop Chrome on YouTube, including light and dark themes. A narrow viewport must retain access to the same actions without horizontal scrolling. Show counts from a complete playlist snapshot when available, otherwise from the active page's rendered rows. YouTube may retain hidden pages in its DOM; those rows are not selectable or counted.
 
 Error messages stay compact while full technical details remain accessible. Reader diagnostics are a supporting troubleshooting tool, not the primary product flow.
+
+## Long operations
+
+Stop finishes and verifies the current batch before preventing subsequent batches. Complete backups remain available independently of compact progress checkpoints. Known native models update in place while preserving scroll and surviving selections; a user-controlled refresh handles unsupported models. More → Performance reports local timing measurements for diagnosis.

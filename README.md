@@ -77,6 +77,17 @@ Tests cover exact duplicate occurrences, scoped pagination, modern empty playlis
 
 Sources: [Original interface](https://chromewebstore.google.com/detail/multiselect-for-youtube/gpgbiinpmelaihndlegbgfkmnpofgfei), [Chrome content scripts](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts), [Watch Later API limitation](https://developers.google.com/youtube/v3/docs/playlistItems/list), [YouTube.js playlist action reference](https://github.com/LuanRT/YouTube.js/blob/main/src/core/managers/PlaylistManager.ts).
 
+### Version 1.6.0
+
+- Immutable playlist backups, selected entries, and planned orders are stored once. Checkpoints and the last ten history records hold references and progress; obsolete referenced payloads are removed after history commits. Older inline backups remain readable and migrate on the next checkpoint.
+- **Stop** appears while a batch operation is running. The current batch is verified before another starts; completed changes remain saved. A failed verification remains interrupted, with its pending intent intact. Stopped operations require review and never resume automatically.
+- Supported native playlist models update after sorting, group placement, or removal without reloading the page. Scroll and surviving selections are preserved. This requires a fully loaded, recognized renderer model and matching account, occurrence IDs, and navigation indices. Count changes additionally require a recognized native header. Unsupported models, newly added rows, and partial lists offer a **Refresh** action and disable stale playlist editing.
+- **More → Performance** shows the last twenty local timing records, with loading, edits, verification, verification waiting, checkpoint storage, request spacing, and page-update stages. JSON export includes timing metadata, not video titles, URLs, account identities, or credentials. Overlapping reads can make stage totals exceed wall time.
+
+In the synthetic 1,000-entry checkpoint benchmark, the first payload write is **212,854 bytes** and the following checkpoint is **351 bytes** (99.84% smaller). These are serialized storage payload sizes, not promised live speedups. In-place reconciliation adds a fresh playlist read before touching YouTube’s model; it never sends playlist edits.
+
+Validation includes legacy migration, worker restart, missing payloads, quota failures, history cleanup, stopping before and during batches, interrupted verification, native model rollback, duplicate occurrences, and browser checks for scroll/selection preservation, deletion, refresh fallback, Stop, and the timings panel. Live signed-in playlist changes were not exercised.
+
 ### Version 1.5.0
 
 - Replaced the floating bottom toolbar and saturated card highlights with a 52px masthead selection bar, native surfaces, leading checkboxes, and direct Save access.

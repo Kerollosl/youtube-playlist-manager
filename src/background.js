@@ -1,11 +1,19 @@
 import { youtubeCommand } from './youtube-api.js';
+import { youtubeRefresh } from './youtube-view.js';
+import { saveJob, archiveJob, hydrateJobs } from './job-store.js';
+import { measure, newTimings } from './timings.js';
 import { assertAccount, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, orderPlan, reorderItems } from './operations.js';
 
 let busy = false;
+let running = null;
+let timingWrites = Promise.resolve();
 let lastEditAt = 0;
 const validPlaylist = id => typeof id === 'string' && /^[A-Za-z0-9_-]{2,128}$/.test(id);
 const validVideo = id => typeof id === 'string' && /^[A-Za-z0-9_-]{11}$/.test(id);
-async function read(tabId, playlistId, pickerVideoId, expectedFingerprint) {
+function read(tabId, playlistId, pickerVideoId, expectedFingerprint, timings, stage = 'load') {
+  return measure(timings, stage, () => readPlaylist(tabId, playlistId, pickerVideoId, expectedFingerprint));
+}
+async function readPlaylist(tabId, playlistId, pickerVideoId, expectedFingerprint) {
   // Retry incomplete browse snapshots only; mutations and identity errors never retry.
   let fingerprint = expectedFingerprint;
   let snapshot;
@@ -24,18 +32,18 @@ async function read(tabId, playlistId, pickerVideoId, expectedFingerprint) {
 
 async function savedProbe() {
   const { queue, activeJob, history = [] } = await chrome.storage.local.get(['queue', 'activeJob', 'history']);
-  return [queue, activeJob, ...history].flatMap(job => job?.items || []).find(item => validVideo(item.videoId))?.videoId;
+  return [queue, activeJob, ...history].flatMap(job => [job?.probeVideoId, ...(job?.items || []).map(item => item.videoId)]).find(validVideo);
 }
 
-async function api(tabId, command) {
+async function api(tabId, command, timings) {
   const tab = await chrome.tabs.get(tabId);
   if (!tab.url?.startsWith('https://www.youtube.com/')) throw new Error('Open a YouTube tab first.');
   if (command.type === 'edit') {
     const wait = Math.max(0, 600 - (Date.now() - lastEditAt));
-    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+    if (wait) await measure(timings, 'throttle', () => new Promise(resolve => setTimeout(resolve, wait)));
     lastEditAt = Date.now();
   }
-  const results = await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: youtubeCommand, args: [command] });
+  const results = await measure(timings, 'edit', () => chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: youtubeCommand, args: [command] }));
   const result = results[0]?.result;
   if (!result?.ok) throw new Error(result?.error || 'YouTube returned no usable result.');
   return result;
@@ -43,24 +51,55 @@ async function api(tabId, command) {
 
 async function save(job) {
   job.updatedAt = Date.now();
-  await chrome.storage.local.set({ activeJob: job });
+  job.stopRequested = running?.jobId === job.id && running.stopRequested || job.stopRequested || false;
+  await measure(job.timings, 'storage', () => saveJob(chrome.storage.local, job));
 }
 
 async function archive(job) {
-  const { history = [], queue } = await chrome.storage.local.get(['history', 'queue']);
+  const { queue } = await chrome.storage.local.get('queue');
   const clearCut = job.phase === 'completed' && job.kind === 'move' && queue?.kind === 'move' && queue.sourceId === job.sourceId && JSON.stringify(queue.items.map(item => item.setVideoId)) === JSON.stringify(job.items.map(item => item.setVideoId));
-  await chrome.storage.local.set({ history: [structuredClone(job), ...history].slice(0, 10), historyCount: Math.min(history.length + 1, 10), activeJob: null, ...(clearCut ? { queue: null } : {}) });
+  await measure(job.timings, 'storage', () => archiveJob(chrome.storage.local, job, clearCut));
 }
 
 async function run(message) {
+  if (message.type === 'PERFORMANCE') return { entries: (await chrome.storage.local.get('performanceLog')).performanceLog || [] };
+  if (message.type === 'STOP') {
+    if (!running || !message.jobId || running.jobId !== message.jobId) throw new Error('That operation is no longer running.');
+    running.stopRequested = true;
+    await chrome.storage.local.set({ stopRequest: { jobId: message.jobId, requestedAt: Date.now() } });
+    return { stopping: true };
+  }
+  if (message.type === 'SYNC_VIEW') {
+    if (busy) throw new Error('Wait for the current operation to finish.');
+    busy = true;
+    const timings = newTimings();
+    try {
+      const stored = await chrome.storage.local.get(['activeJob', 'history']);
+      const record = [stored.activeJob, ...(stored.history || [])].find(job => job?.id === message.jobId);
+      if (!record) return { updated: false };
+      const [job] = await hydrateJobs(chrome.storage.local, [record]);
+      if (job.fingerprint !== message.expectedFingerprint) return { updated: false };
+      const before = [job.removalBefore, job.sourceBefore, job.targetBefore].find(snapshot => snapshot?.playlistId === message.playlistId);
+      if (!before) return { updated: false };
+      const after = await read(message.tabId, message.playlistId, job.items?.[0]?.videoId, job.fingerprint, timings);
+      const results = await measure(timings, 'view', () => chrome.scripting.executeScript({ target: { tabId: message.tabId }, world: 'MAIN', func: youtubeRefresh, args: [{ before, after }] }));
+      return { updated: results[0]?.result?.updated === true, snapshot: after };
+    } finally { busy = false; await recordTimings(timings, 'view', 'checked'); }
+  }
   if (message.type === 'READ') {
     if (!validPlaylist(message.playlistId)) throw new Error('Enter a valid playlist URL or ID.');
     if (message.pickerVideoId !== undefined && !validVideo(message.pickerVideoId)) throw new Error('Invalid video ID for playlist lookup.');
-    return read(message.tabId, message.playlistId, message.pickerVideoId || await savedProbe());
+    const timings = newTimings();
+    try { return await read(message.tabId, message.playlistId, message.pickerVideoId || await savedProbe(), undefined, timings); }
+    finally { await recordTimings(timings, 'read', 'checked'); }
   }
   if (message.type === 'PLAYLISTS') return api(message.tabId, { type: 'playlists', videoId: message.videoId || await savedProbe() });
   if (message.type === 'STATUS') {
-    if (message.detailed) return { ...await chrome.storage.local.get(['activeJob', 'history', 'queue']), busy };
+    if (message.detailed) {
+      const stored = await chrome.storage.local.get(['activeJob', 'history', 'queue']);
+      const [activeJob, ...history] = await hydrateJobs(chrome.storage.local, [stored.activeJob, ...(stored.history || [])]);
+      return { ...stored, activeJob, history, busy };
+    }
     const stored = await chrome.storage.local.get(['activeJob', 'queue', 'historyCount']);
     const summary = job => {
       if (!job) return job;
@@ -68,6 +107,7 @@ async function run(message) {
       const title = snapshot => snapshot ? { playlistId: snapshot.playlistId, title: snapshot.title } : null;
       return { ...rest, sourceBefore: title(sourceBefore), targetBefore: title(targetBefore) };
     };
+    [stored.activeJob] = await hydrateJobs(chrome.storage.local, [stored.activeJob], ['items']);
     const historyCount = stored.historyCount ?? (await chrome.storage.local.get('history')).history?.length ?? 0;
     return { activeJob: summary(stored.activeJob), queue: summary(stored.queue), historyCount, busy };
   }
@@ -92,7 +132,8 @@ async function run(message) {
     if (busy) throw new Error('Wait for the current step to finish.');
     busy = true;
     try {
-      const { activeJob } = await chrome.storage.local.get('activeJob');
+      let { activeJob } = await chrome.storage.local.get('activeJob');
+      [activeJob] = await hydrateJobs(chrome.storage.local, [activeJob]);
       if (message.jobId && message.jobId !== activeJob?.id) throw new Error('The saved operation changed.');
       if (activeJob) { activeJob.phase = 'stopped'; await archive(activeJob); }
       return {};
@@ -101,18 +142,25 @@ async function run(message) {
   if (busy) throw new Error('An operation is already running.');
   busy = true;
   let job;
+  const timings = newTimings();
+  running = { jobId: null, stopRequested: false };
   try {
-    const { activeJob, queue } = await chrome.storage.local.get(['activeJob', 'queue']);
+    const { activeJob, queue } = await measure(timings, 'storage', async () => {
+      const stored = await chrome.storage.local.get(['activeJob', 'queue']);
+      const [activeJob] = await hydrateJobs(chrome.storage.local, [stored.activeJob]);
+      return { ...stored, activeJob };
+    });
+    if (activeJob) running.jobId = activeJob.id;
     if (message.type === 'CHECK_OPERATION') {
       if (!activeJob || !['copy', 'move'].includes(activeJob.kind)) throw new Error('There is no saved copy or move to check.');
       if (message.jobId && message.jobId !== activeJob.id) throw new Error('The saved operation changed.');
       if (activeJob.removed?.length || ['remove', 'remove_batch'].includes(activeJob.intent?.kind)) throw new Error('Removal already started. Review the saved operation.');
-      const destination = await read(message.tabId, activeJob.targetId, activeJob.items[0]?.videoId, activeJob.fingerprint);
+      const destination = await read(message.tabId, activeJob.targetId, activeJob.items[0]?.videoId, activeJob.fingerprint, timings);
       assertCopied(activeJob, destination);
       const actual = counts(destination.items), baseline = counts(activeJob.targetBefore.items), added = counts(activeJob.items);
       if (Object.entries(added).some(([id, count]) => (actual[id] || 0) !== (baseline[id] || 0) + count)) throw new Error('Conflicting destination counts. Review the saved operation.');
       // Assign only after verification so failed checks leave the saved job untouched.
-      job = activeJob;
+      job = activeJob; job.timings = timings; job.stopRequested = false;
       job.copied = job.items.map(item => item.setVideoId);
       job.intent = null;
       delete job.error;
@@ -122,18 +170,18 @@ async function run(message) {
       return { job };
     }
     if (message.type === 'FINISH_MOVE') {
-      job = activeJob;
-      if (job?.phase !== 'ready_to_remove' || job.kind !== 'move' || message.jobId !== job.id) throw new Error('There is no verified move to finish.');
+      if (activeJob?.phase !== 'ready_to_remove' || activeJob.kind !== 'move' || message.jobId !== activeJob.id) throw new Error('There is no verified move to finish.');
+      job = activeJob; job.timings = timings; job.stopRequested = false;
       const [source, destination] = await Promise.all([
-        read(message.tabId, job.sourceId, job.items[0]?.videoId, job.fingerprint),
-        read(message.tabId, job.targetId, job.items[0]?.videoId, job.fingerprint),
+        read(message.tabId, job.sourceId, job.items[0]?.videoId, job.fingerprint, timings),
+        read(message.tabId, job.targetId, job.items[0]?.videoId, job.fingerprint, timings),
       ]);
       assertAccount(source, job.fingerprint);
       assertCopied(job, destination);
       if (!source.editable) throw new Error('The source playlist is not editable.');
       job.phase = 'removing';
       await save(job);
-      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId), destination, source);
+      await removeItems(job, makeIO(message.tabId, job), destination, source);
       job.phase = 'completed';
       await archive(job);
       return { job };
@@ -157,7 +205,7 @@ async function run(message) {
       fingerprint = queue.fingerprint;
     } else {
       if (!validPlaylist(sourceId)) throw new Error('No valid source playlist.');
-      source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint);
+      source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint, timings);
       assertAccount(source, pasted ? queue.fingerprint : message.expectedFingerprint);
       fingerprint = source.fingerprint;
       items = exactItems(pasted ? queue.items.map(item => item.setVideoId) : message.keys, source);
@@ -172,29 +220,30 @@ async function run(message) {
       placement = reorderPlan(source, message.keys, message.position, message.beforeId);
     }
     if (archiveStoppedCopy) await archive({ ...activeJob, phase: 'stopped' });
-    job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now() };
+    job = { id: crypto.randomUUID(), kind, sourceId, fingerprint, sourceBefore: source || queue?.sourceBefore, items, copied: [], removed: [], intent: null, phase: 'starting', createdAt: Date.now(), timings };
+    running.jobId = job.id;
     if (kind === 'copy' || kind === 'move') {
       if (!validPlaylist(message.targetId) || message.targetId === sourceId) throw new Error('Choose a different destination playlist.');
-      const target = await read(message.tabId, message.targetId, items[0]?.videoId, fingerprint);
+      const target = await read(message.tabId, message.targetId, items[0]?.videoId, fingerprint, timings);
       assertAccount(target, fingerprint);
       if (!target.editable) throw new Error('The destination playlist is not editable.');
       job.targetId = message.targetId;
       job.targetBefore = target;
       job.phase = 'copying';
       await save(job);
-      await copyItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      await copyItems(job, makeIO(message.tabId, job));
       if (kind === 'move') { job.phase = 'ready_to_remove'; await save(job); }
       else { job.phase = 'completed'; await archive(job); }
     } else if (kind === 'remove') {
       job.phase = 'removing';
       await save(job);
-      await removeItems(job, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      await removeItems(job, makeIO(message.tabId, job));
       job.phase = 'completed';
       await archive(job);
     } else if (kind === 'reorder') {
       job.phase = 'reordering';
       await save(job);
-      await reorderItems(job, placement, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      await reorderItems(job, placement, makeIO(message.tabId, job));
       job.phase = 'completed';
       await archive(job);
     } else {
@@ -208,25 +257,45 @@ async function run(message) {
       job.phase = 'sorting';
       await save(job);
       const plan = orderPlan(source, desired.map(item => item.setVideoId));
-      await reorderItems(job, plan, makeIO(message.tabId, job.fingerprint, job.items[0]?.videoId));
+      await reorderItems(job, plan, makeIO(message.tabId, job));
       job.phase = 'completed';
       await archive(job);
     }
     return { job };
   } catch (error) {
     if (job && (await chrome.storage.local.get('activeJob')).activeJob?.id === job.id) {
-      job.phase = 'interrupted'; job.error = error.message; await save(job);
+      job.phase = error.code === 'STOPPED' ? 'stopped' : 'interrupted'; job.error = error.message; await save(job);
+      if (error.code === 'STOPPED') return { job, stopped: true };
       error.jobId = job.id;
     }
     throw error;
-  } finally { busy = false; }
+  } finally {
+    running = null; busy = false;
+    await recordTimings(timings, job?.kind || message.type.toLowerCase(), job?.phase || 'failed');
+  }
 }
 
-function makeIO(tabId, expectedFingerprint, pickerVideoId) {
+async function recordTimings(timings, kind, phase) {
+  timings.elapsedMs = Date.now() - timings.startedAt;
+  const entry = structuredClone({ ...timings, kind, phase });
+  timingWrites = timingWrites.then(async () => {
+    try {
+      const { performanceLog = [] } = await chrome.storage.local.get('performanceLog');
+      await chrome.storage.local.set({ performanceLog: [entry, ...performanceLog].slice(0, 20) });
+    } catch { /* Optional metrics must never change a verified mutation outcome. */ }
+  });
+  await timingWrites;
+}
+
+function makeIO(tabId, job) {
   return {
-    read: playlistId => read(tabId, playlistId, pickerVideoId, expectedFingerprint),
-    edit: (playlistId, action) => api(tabId, { type: 'edit', playlistId, action, expectedFingerprint }),
-    editBatch: (playlistId, actions) => api(tabId, { type: 'edit', playlistId, actions, expectedFingerprint }),
+    beforeBatch: async () => {
+      if (running?.stopRequested) throw Object.assign(new Error('Stopped after the last verified batch. Completed changes are saved.'), { code: 'STOPPED' });
+    },
+    wait: ms => measure(job.timings, 'verification_wait', () => new Promise(resolve => setTimeout(resolve, ms))),
+    read: playlistId => read(tabId, playlistId, job.items[0]?.videoId, job.fingerprint, job.timings, 'verification'),
+    edit: (playlistId, action) => api(tabId, { type: 'edit', playlistId, action, expectedFingerprint: job.fingerprint }, job.timings),
+    editBatch: (playlistId, actions) => api(tabId, { type: 'edit', playlistId, actions, expectedFingerprint: job.fingerprint }, job.timings),
     save,
   };
 }
@@ -238,7 +307,7 @@ chrome.action.onClicked.addListener(tab => {
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.tab || !sender.url?.startsWith('https://www.youtube.com/')) return;
   // Sender identity determines the tab; webpage data cannot redirect an operation.
-  const allowed = ['READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'];
+  const allowed = ['STOP', 'PERFORMANCE', 'SYNC_VIEW', 'READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'];
   if (!message || !allowed.includes(message.type)) { respond({ ok: false, error: 'Unsupported action.' }); return; }
   run({ ...message, tabId: sender.tab.id }).then(result => respond({ ...result, ok: true })).catch(error => respond({ ok: false, error: error.message, jobId: error.jobId }));
   return true;

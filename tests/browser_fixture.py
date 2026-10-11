@@ -101,13 +101,21 @@ class BrowserFixture(unittest.TestCase):
         self.assertEqual(page.locator('.yt-multiselect-checkbox').count(), 0)
         self.assertEqual(page.locator('#yt-multiselect-spacer').count(), 0)
         self.assertEqual(page.locator('ytd-playlist-video-renderer[draggable=true]').count(), 5)
-    def test_sort_controls_execute_and_survive_reload(self):
+    def test_sort_updates_in_place_and_preserves_selection(self):
         page = self.open_page()
+        page.locator('.yt-multiselect-checkbox').first.check()
+        page.evaluate('scrollTo(0, 100)')
+        scroll = page.evaluate('scrollY')
         page.locator('[data-action=menu]').click()
         page.get_by_role('menuitem', name='Sort playlist', exact=False).click()
         self.assertEqual(page.locator('#sort-by').input_value(), 'title')
-        with page.expect_navigation(): page.get_by_role('button', name='Sort', exact=True).click()
+        page.evaluate('window.keptPage = true')
+        page.get_by_role('button', name='Sort', exact=True).click()
+        page.wait_for_function('document.querySelector("#video-title").textContent === "A calmer workflow"')
+        self.assertTrue(page.evaluate('window.keptPage'))
         self.assertEqual(page.locator('#video-title').first.text_content(), 'A calmer workflow')
+        self.assertEqual(page.locator('.yt-multiselect-checkbox:checked').count(), 1)
+        self.assertAlmostEqual(page.evaluate('scrollY'), scroll, delta=1)
     def test_late_copy_is_checked_without_replaying_adds(self):
         page = self.open_page(scenario='late-copy')
         page.locator('.yt-multiselect-checkbox').first.check()
@@ -149,16 +157,18 @@ class BrowserFixture(unittest.TestCase):
         page = self.open_page()
         page.locator('.yt-multiselect-checkbox').nth(0).check()
         page.locator('.yt-multiselect-checkbox').nth(2).check()
-        with page.expect_navigation():
-            page.evaluate("""() => {
+        page.evaluate('window.keptPage = true')
+        page.evaluate("""() => {
                 const rows = document.querySelectorAll('ytd-playlist-video-renderer'), transfer = new DataTransfer();
                 rows[0].dispatchEvent(new DragEvent('dragstart', {bubbles:true,cancelable:true,dataTransfer:transfer}));
                 const bounds = rows[4].getBoundingClientRect();
                 rows[4].dispatchEvent(new DragEvent('dragover', {bubbles:true,cancelable:true,dataTransfer:transfer,clientY:bounds.bottom-2}));
                 rows[4].dispatchEvent(new DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer,clientY:bounds.bottom-2}));
             }""")
+        page.wait_for_function('document.querySelector("ytd-playlist-video-renderer").dataset.occurrence === "two"')
+        self.assertTrue(page.evaluate('window.keptPage'))
+        self.assertEqual(page.locator('.yt-multiselect-checkbox:checked').count(), 2)
         self.assertEqual(page.locator('ytd-playlist-video-renderer').evaluate_all('(rows) => rows.map(row => row.dataset.occurrence)'), ['two', 'four', 'five', 'one', 'three'])
-        page.locator('#yt-multiselect-toggle').click()
         page.locator('[data-action=close]').click()
         page.evaluate("""() => {
             const rows = document.querySelectorAll('ytd-playlist-video-renderer'), transfer = new DataTransfer();
@@ -166,6 +176,42 @@ class BrowserFixture(unittest.TestCase):
             rows[4].dispatchEvent(new DragEvent('drop', {bubbles:true,cancelable:true,dataTransfer:transfer}));
         }""")
         self.assertEqual(page.locator('#results').text_content(), 'Native single-video move completed.')
+    def test_refresh_fallback_keeps_page_and_disables_stale_editing(self):
+        page = self.open_page(scenario='view-fallback')
+        page.locator('.yt-multiselect-checkbox').first.check()
+        page.evaluate('window.keptPage = true')
+        page.locator('[data-action=menu]').click()
+        page.get_by_role('menuitem', name='Sort playlist', exact=False).click()
+        page.get_by_role('button', name='Sort', exact=True).click()
+        page.get_by_role('button', name='Refresh', exact=True).wait_for()
+        self.assertTrue(page.evaluate('window.keptPage'))
+        self.assertEqual(page.locator('#video-title').first.text_content(), 'Building useful tools')
+        page.locator('[data-action=menu]').click()
+        self.assertTrue(page.get_by_role('menuitem', name='Delete from playlist', exact=False).is_disabled())
+    def test_delete_updates_rows_without_reload(self):
+        page = self.open_page()
+        page.locator('.yt-multiselect-checkbox').first.check()
+        page.evaluate('window.keptPage = true')
+        page.locator('[data-action=menu]').click()
+        page.get_by_role('menuitem', name='Delete from playlist', exact=False).click()
+        page.get_by_role('button', name='Delete 1', exact=True).click()
+        page.wait_for_function('document.querySelectorAll("ytd-playlist-video-renderer").length === 4')
+        self.assertTrue(page.evaluate('window.keptPage'))
+        self.assertEqual(page.locator('.yt-multiselect-checkbox:checked').count(), 0)
+    def test_stop_waits_for_batch_and_performance_is_accessible(self):
+        page = self.open_page(320, scenario='stop')
+        page.locator('.yt-multiselect-checkbox').first.check()
+        page.locator('[data-action=menu]').click()
+        page.get_by_role('menuitem', name='Move in this playlist', exact=False).click()
+        page.get_by_role('button', name='Move to bottom', exact=True).click()
+        page.get_by_role('button', name='Stop after current batch', exact=True).click()
+        page.wait_for_function('document.querySelector("#yt-multiselect-tools").shadowRoot.querySelector(".toast").textContent.includes("Stopped")')
+        self.assertTrue(page.locator('[data-action=stop]').is_hidden())
+        page.locator('[data-action=menu]').click()
+        page.get_by_role('menuitem', name='Performance', exact=False).click()
+        self.assertTrue(page.get_by_role('dialog', name='Performance', exact=True).is_visible())
+        self.assertTrue(page.get_by_text('Checkpoint storage:', exact=False).is_visible())
+        self.assertTrue(page.get_by_role('button', name='Download timings', exact=True).is_visible())
     def test_checkpoints_update_inline_progress_without_status_round_trip(self):
         page = self.open_page()
         page.evaluate('''() => {
