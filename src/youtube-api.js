@@ -395,7 +395,7 @@ export async function youtubeCommand(command) {
         }
         if (setVideoId) seenOccurrences.add(setVideoId);
         const length = text(video.lengthText);
-        const seconds = Number(video.lengthSeconds);
+        const seconds = video.lengthSeconds == null || video.lengthSeconds === '' ? NaN : Number(video.lengthSeconds);
         result.items.push({
           key: `${command.playlistId}:${setVideoId || `unidentified-${position}`}`,
           setVideoId, videoId: videoId(video.videoId) ? video.videoId : null,

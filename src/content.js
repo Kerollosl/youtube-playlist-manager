@@ -9,7 +9,7 @@
   <div class="bar" role="toolbar" aria-label="Selected videos" aria-busy="false" hidden>
     <button class="icon" data-action="close" title="Close selection" aria-label="Close selection">${svg('close')}</button>
     <button class="icon" data-action="all" role="checkbox" aria-checked="false" title="Select all" aria-label="Select all">${svg('clear')}</button>
-    <span class="count" aria-live="polite">0 selected</span>
+    <span class="selection-info" aria-live="polite"><span class="count">0 selected</span><span class="duration" hidden></span></span>
     <div class="toolbar-actions">
       <button class="text stop" data-action="stop" title="Stop after the current batch is verified" aria-label="Stop after current batch" hidden>Stop</button>
       <button class="text save primary" data-action="save" title="Save to playlist" aria-label="Save to playlist">${svg('save')}<span>Save</span></button>
@@ -35,7 +35,7 @@
     if (name === 'watchLater') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm-1 3v6l5 3 1-1.7-4-2.3V7h-2Z"></path></svg>';
     if (name === 'history') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1-9.8 12h2.1A8 8 0 1 0 6.3 6.3L9 9H2V2l2.9 2.9A10 10 0 0 1 12 2Zm-1 5h2v5.4l4 2.3-1 1.7-5-2.9V7Z"></path></svg>';
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
-    const paths = { mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.6 12 16 5.6 14.4 4 8 10.4A4 4 0 1 0 9.6 12ZM5 17a2 2 0 1 1 0-4 2 2 0 0 1 0 4Zm5.4-3L14 17.6l1.6-1.6-3.6-3.6-1.6 1.6ZM19 13a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 6a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
+    const paths = { summary: "M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3 3-7Z", mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.64 7.64a3.5 3.5 0 1 0-1.41 1.41L11.17 12l-2.94 2.95a3.5 3.5 0 1 0 1.41 1.41L12.59 13.4 18 18.81V16l-4-4 4-4V5.19l-5.41 5.41-2.95-2.96ZM6.5 8A1.5 1.5 0 1 1 6.5 5a1.5 1.5 0 0 1 0 3Zm0 11a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]}"></path></svg>`;
   }
   function element(tag, text, className) { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; }
@@ -43,6 +43,15 @@
   function playlistId() { return new URL(location.href).searchParams.get('list'); }
   function navigationScope() { const url = new URL(location.href); return url.searchParams.get('list') ? `playlist:${url.searchParams.get('list')}` : `${url.pathname}?${url.searchParams.toString()}`; }
   function validVideo(item) { return /^[A-Za-z0-9_-]{11}$/.test(item?.videoId || ''); }
+  function rowDuration(row) {
+    const text = row.querySelector('ytd-thumbnail-overlay-time-status-renderer #text, ytd-thumbnail-overlay-time-status-renderer span')?.textContent.trim();
+    if (!/^\d+(?::[0-5]\d){1,2}$/.test(text || '')) return null;
+    return text.split(':').reduce((total, part) => total * 60 + Number(part), 0);
+  }
+  function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600), minutes = Math.floor(seconds % 3600 / 60), remainder = seconds % 60;
+    return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}` : `${minutes}:${String(remainder).padStart(2, '0')}`;
+  }
   function links(items = [...selected.values()]) { return items.filter(validVideo).map(item => `https://www.youtube.com/watch?v=${item.videoId}`).join('\n'); }
   function notice(text, actionText, action, persistent = false, tone = 'status') {
     noticeRevision++;
@@ -87,9 +96,9 @@
       if (index !== null) { const atIndex = byIndex.get(index); if (atIndex?.videoId === videoId) exact = atIndex; }
       else { exact = byVideo.get(videoId); }
     }
-    if (exact?.setVideoId) return canonical(exact);
+    if (exact?.setVideoId) return canonical({ ...exact, durationSeconds: exact.durationSeconds ?? rowDuration(row) });
     const list = playlistId();
-    return { key: list && index !== null ? `row:${list}:${videoId}:${index}` : `row:${scope}:${videoId}`, videoId, index, title: anchor.getAttribute('title') || anchor.textContent.trim() || videoId, channel: row.querySelector('#channel-name,#byline-container')?.textContent.trim() || '', playlistId: list };
+    return { key: list && index !== null ? `row:${list}:${videoId}:${index}` : `row:${scope}:${videoId}`, videoId, index, title: anchor.getAttribute('title') || anchor.textContent.trim() || videoId, channel: row.querySelector('#channel-name,#byline-container')?.textContent.trim() || '', durationSeconds: rowDuration(row), playlistId: list };
   }
   function loadedRows() {
     const visible = node => node.getClientRects().length > 0 && !node.closest('[hidden],[aria-hidden="true"]');
@@ -131,6 +140,12 @@
     else if (!selected.size && queued) label.replaceChildren(document.createTextNode(`${queued}`), element('small', ` ready to ${operationStatus.queue.kind === 'move' ? 'move' : 'copy'}`));
     else label.replaceChildren(document.createTextNode(`${selected.size}`), element('small', ` / ${count}`), document.createTextNode(' selected'));
     label.title = active ? 'A saved operation needs attention' : queued && !selected.size ? `${queued} videos ready to ${operationStatus.queue.kind}` : `${selected.size} of ${count} ${snapshot?.complete ? 'playlist' : 'loaded'} videos selected`;
+    const duration = root.querySelector('.duration'), durations = [...selected.values()].map(item => item.durationSeconds);
+    const known = durations.filter(value => Number.isFinite(value) && value >= 0);
+    const missing = durations.length - known.length;
+    duration.hidden = !selected.size;
+    duration.textContent = known.length ? `${formatDuration(known.reduce((sum, value) => sum + value, 0))}${missing ? ' + unknown' : ''}` : 'Duration unknown';
+    duration.title = missing ? `${missing} selected ${missing === 1 ? 'video has' : 'videos have'} no available duration` : 'Total duration of selected videos';
     bar.setAttribute('aria-busy', String(working || operationStatus.busy));
     root.querySelector('[data-action="menu"]').classList.toggle('has-status', Boolean(active || queued));
     root.querySelector('[data-action="links"]').disabled = !selected.size || working;
@@ -296,7 +311,7 @@
     catch (error) { if (enabled && navigationScope() === capturedScope && revision === noticeRevision && !working) report(error); }
     finally { readPending = false; if (enabled && scope !== capturedScope && playlistId()) readPlaylist(); }
   }
-  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
+  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { selected.clear(); lastAnchor = null; clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
   function selectAll() { const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); for (const item of items) selected.set(item.key, item); syncRows(); }
   function deselect() { selected.clear(); lastAnchor = null; syncRows(); }
   function menuButtons() { return [...menu.querySelectorAll('button:not(:disabled)')].filter(node => node.getClientRects().length); }
@@ -323,27 +338,39 @@
       const copy = element('span', '', 'menu-copy'); copy.append(element('strong', text)); node.append(document.createRange().createContextualFragment(svg(icon)), copy);
       if (danger) node.classList.add('danger'); menu.append(node);
     };
-    group('Selection');
-    add('all', 'Select all', 'Every verified playlist video', selectAll, !snapshot?.complete && !entries.length);
-    add('clear', 'Deselect all', 'Clear the current selection', deselect, !selected.size);
-    add('link', 'Copy video links', 'Plain links for NotebookLM or anywhere else', () => copyLinks(), !selected.size);
+    group('Summarize');
+    add('summary', 'YT Summary', 'Copy /YT and selected links for Gemini · ⌥Space, then paste', ytSummary, !selected.size);
     divide(); group('Organize');
     add('copy', 'Copy selection', 'Keep a reusable copy for another playlist', () => queueSelection('copy'), !selected.size);
     const editReason = !selected.size ? 'Select videos first' : needsReload ? 'Refresh YouTube before editing again' : !exact ? 'Wait for the complete playlist to load' : !snapshot?.editable ? 'This playlist is not editable' : null;
     add('cut', 'Cut selection', editReason || 'Move only after destination copies are verified', cutDialog, Boolean(editReason));
-    add('save', 'Save to playlist…', selected.size ? 'Copy the current selection' : queued ? `Continue with ${queued} saved videos` : 'Select or copy videos first', saveDialog, !selected.size && !queued && !operationStatus.activeJob);
     add('toggle', 'Move in this playlist…', editReason || (!reorderable ? 'Open a playlist that supports reordering' : 'Move the selection to the top, bottom, or a custom position'), reorderDialog, !reorderable);
     add('all', selected.size ? 'Sort selected videos…' : 'Sort playlist…', selected.size ? `Order only the ${selected.size} selected videos` : 'Order the entire playlist by title, channel, or duration', sortDialog, needsReload || !snapshot?.complete || !snapshot?.editable || !snapshot?.canReorder || !snapshot?.items.length || Boolean(selected.size && !exact));
-    divide(); group('Saved & recovery');
-    add('recovery', active ? 'Review saved operation' : 'Saved operations', active ? 'A stopped or verified operation needs attention' : `${operationStatus.historyCount ?? operationStatus.history?.length ?? 0} recent backups`, recoveryDialog);
-    add('recovery', 'Performance', 'Recent action timings on this device', performanceDialog);
+    divide();
     add('trash', 'Delete from playlist…', editReason || 'Review titles before permanent removal', deleteSelected, Boolean(editReason), true);
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
   async function copyLinks(items = [...selected.values()]) {
     const text = links(items); if (!text) return;
-    try { await navigator.clipboard.writeText(text); announce(`${items.length} links copied. Paste into NotebookLM.`); }
+    try { await navigator.clipboard.writeText(text); deselect(); announce(`${items.length} links copied. Paste into NotebookLM.`); }
     catch { const body = dialog('Selected video links'); body.append(element('p', 'Copy these links, one per line.')); const area = element('textarea'); area.value = text; area.readOnly = true; area.setAttribute('aria-label', 'Selected video links'); body.append(area); footer(body); area.focus(); area.select(); }
+  }
+  async function ytSummary() {
+    const urls = links(); if (!urls) return;
+    const text = `/YT\n${urls}`;
+    const instructions = 'Press ⌥Space to open Gemini, then paste. If YT is not activated, choose it from Gemini’s / skill menu before sending.';
+    try {
+      await navigator.clipboard.writeText(text);
+      deselect();
+      notice('YT prompt copied. Press ⌥Space to open Gemini, then paste.', 'Help', () => {
+        const body = dialog('YT Summary'); body.append(element('p', instructions)); footer(body);
+      }, true);
+    } catch {
+      const body = dialog('YT Summary');
+      body.append(element('p', `Copy this prompt. ${instructions}`));
+      const area = element('textarea'); area.value = text; area.readOnly = true; area.setAttribute('aria-label', 'YT Summary prompt');
+      body.append(area); footer(body); area.focus(); area.select();
+    }
   }
   function download(name, content, type = 'application/json') { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = element('a'); anchor.href = url; anchor.download = name; root.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
   async function readerDialog() {
@@ -521,6 +548,7 @@
       }
       if (!enabled || navigationScope() !== operationScope) return result;
       const job = result.job;
+      if (!result.stopped) deselect();
       const affectsCurrent = (['REMOVE', 'FINISH_MOVE', 'REORDER', 'SORT'].includes(type) && job?.sourceId === playlistId()) || (['TRANSFER', 'PASTE'].includes(type) && args.targetId === playlistId());
       const updated = !affectsCurrent || await syncView(job);
       if (result.stopped) {

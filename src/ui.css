@@ -422,14 +422,24 @@ button svg {
   box-shadow:0 6px 28px #0004;
   white-space:nowrap;
 }
-.count {
+.selection-info {
   flex:1;
   min-width:0;
+  margin-inline:4px 12px;
+  line-height:1.2;
+}
+.count {
+  display:block;
   overflow:hidden;
   text-overflow:ellipsis;
   font-weight:500;
   font-variant-numeric:tabular-nums;
-  margin-inline:4px 12px;
+}
+.duration {
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
 }
 .count small {
   color:var(--muted);
@@ -516,9 +526,11 @@ button svg {
     padding:4px 8px;
     gap:0;
   }
+  .selection-info {
+    margin:0 4px;
+  }
   .count {
     font-size:13px;
-    margin:0 4px;
   }
   .count small {
     display:none;

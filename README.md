@@ -7,11 +7,13 @@ A custom Chrome extension that works directly inside YouTube. Selection controls
 - **History, Playlists, and Watch Later shortcuts** above You in the compact left sidebar, available even with selection mode off. Shortcuts reuse mounted native navigation entries for in-page transitions; ordinary links remain available as a fallback.
 - Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a subtle blue tint. No visible checkbox covers YouTube’s buttons; keyboard and screen-reader selection remain available.
 - Use the toolbar’s checkbox to select all, show a partial selection, or deselect all.
+- Closing selection mode clears the selected videos and Shift-click anchor. Reopening starts with nothing selected.
+- Successful actions clear the selection, including Copy links, YT Summary, Save, Move, Sort, and Delete. Canceling a dialog or a failed action keeps the selection available for retry.
 - **Copy selected links** as plain text: one clean YouTube URL per line, ready to paste into NotebookLM.
 - Copy selections into a durable local queue; Cut stages a move without removing originals.
 - Paste to another playlist using YouTube's signed-in session.
 - Verify destination copies before offering a separate confirmation to remove originals.
-- An upward-opening grouped action menu clearly separates link copying, reusable playlist selections, saving, recovery, and deletion.
+- A compact upward-opening menu provides YT Summary, Copy selection, Cut, Move, Sort, and Delete. Select all/deselect all, Save, and Copy links stay in the main toolbar. Saved operations and Performance are hidden from the menu.
 - Save, move, delete, and sort with up to 50 actions per verified mutation batch.
 - Move selections to the top or bottom of their current playlist, drag them between videos, or choose a video number to place them before. Selected videos keep their existing playlist order.
 - Sort selected videos by duration, title, or channel. The default is duration descending (longest first). Consecutive selections sort within their current positions; scattered selections sort to the top while other videos keep their order. With no selection, Sort orders the whole playlist.
@@ -36,10 +38,16 @@ https://www.youtube.com/watch?v=abcdefghijk
 https://www.youtube.com/watch?v=lmnopqrstuv
 ```
 
+## YT Summary in Gemini
+
+Select one or more videos, then choose **More → YT Summary**. This copies `/YT` followed by the selected video links, one per line. Press **Option+Space** (your configured Gemini shortcut), paste into Gemini, and send. If pasting does not activate the skill, choose **YT** from Gemini’s `/` skill menu before sending. The extension uses your existing skill; it does not create one.
+
+Chrome provides no public extension API to open its built-in Gemini chat and submit a custom skill. Opening Gemini and sending remain manual. If clipboard access fails, the extension displays a selectable prompt for manual copying. No Gemini permissions or API key are needed.
+
 ## Move videos
 
 1. Select source videos and choose **Cut**. The originals stay in place; the selection is stored in this Chrome profile.
-2. Choose **Save to playlist** and select a destination. It uses your saved Cut selection, including after navigation or a reload.
+2. Click **Save** in the toolbar and select a destination. It uses your saved Cut selection, including after navigation or a reload.
 3. The extension adds copies and checks YouTube's returned playlist contents.
 4. Only after the copies are verified does it offer to remove the exact original playlist entries. Review that list and confirm.
 
@@ -48,6 +56,8 @@ Each batch is journaled before the request, sent once, and checked with read-onl
 ## Recovery and limits
 
 Operation checkpoints and the last 10 operation backups stay in local extension storage. Download important backups to keep them outside Chrome. Uninstalling the extension or clearing its storage removes those local records.
+
+When an operation needs attention, use **Review** in its notice or click the toolbar’s **Save** button. Routine recovery/history and performance entries are hidden from the action menu.
 
 Backups preserve video links and the original playlist contents. Restoring videos from links does not restore unavailable videos or the original occurrence IDs, and may require reordering. There is no automatic undo that claims to recover everything.
 
