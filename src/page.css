@@ -27,6 +27,75 @@ html[dark] #yt-multiselect-toggle {
   height:24px;
   fill:currentColor;
 }
+/* Two actions share one native-style control, immediately before Multiselect. */
+ytd-masthead #end:has(> #yt-watch-later-controls) {
+  flex:0 0 auto;
+  width:max-content;
+  min-width:max-content;
+}
+#yt-watch-later-controls {
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  flex:0 0 auto;
+  height:44px;
+  margin-inline:4px;
+  border:1px solid var(--yt-spec-10-percent-layer,#d9d9d9);
+  border-radius:22px;
+  color:var(--yt-spec-text-primary,#0f0f0f);
+  font:500 14px/20px Roboto,Arial,sans-serif;
+}
+html[dark] #yt-watch-later-controls {
+  color:var(--yt-spec-text-primary,#f1f1f1);
+  border-color:var(--yt-spec-10-percent-layer,#ffffff1a);
+}
+#yt-watch-later-controls button {
+  box-sizing:border-box;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  min-width:44px;
+  flex:0 0 auto;
+  height:44px;
+  padding:0 12px;
+  border:0;
+  background:transparent;
+  color:inherit;
+  font:inherit;
+  white-space:nowrap;
+  cursor:pointer;
+}
+#yt-watch-later-controls .yt-watch-later-sync { border-radius:22px 0 0 22px; }
+#yt-watch-later-controls .yt-watch-later-config {
+  width:44px;
+  padding:0;
+  position:relative;
+  border-radius:0 22px 22px 0;
+}
+#yt-watch-later-controls .yt-watch-later-config::before {
+  content:"";
+  position:absolute;
+  inset-inline-start:0;
+  height:20px;
+  width:1px;
+  background:var(--yt-spec-10-percent-layer,#d9d9d9);
+  pointer-events:none;
+}
+#yt-watch-later-controls button:hover:not(:disabled),
+#yt-watch-later-controls button[aria-expanded=true] { background:var(--yt-spec-10-percent-layer,#0000000d); }
+#yt-watch-later-controls button:disabled { opacity:.55; cursor:default; }
+#yt-watch-later-controls button:focus-visible {
+  outline:2px solid var(--yt-spec-call-to-action,#065fd4);
+  outline-offset:2px;
+}
+#yt-watch-later-controls svg { width:20px; height:20px; fill:currentColor; flex-shrink:0; }
+#yt-watch-later-controls svg,#yt-watch-later-controls span { pointer-events:none; }
+@media (max-width:1200px) {
+  #yt-watch-later-controls .yt-watch-later-sync span { display:none; }
+  #yt-watch-later-controls .yt-watch-later-sync { width:44px; padding:0; }
+  #yt-watch-later-controls { margin-inline:0; }
+}
 ytd-mini-guide-renderer .yt-multiselect-sidebar-link {
   display:flex;
   flex-direction:column;

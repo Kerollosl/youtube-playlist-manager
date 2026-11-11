@@ -15,7 +15,7 @@ export async function youtubeCommand(command) {
     && value.length <= 2048 && !/[\u0000-\u0020\u007f]/.test(value);
   const commandSchemas = {
     read: ['type', 'playlistId', 'pickerVideoId'], edit: ['type', 'playlistId', 'action', 'actions', 'expectedFingerprint'],
-    playlists: ['type', 'videoId'], account: ['type'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
+    playlists: ['type', 'videoId'], library: ['type'], account: ['type'], create: ['type', 'title', 'videoIds', 'expectedFingerprint']
   };
   if (!Object.hasOwn(commandSchemas, command?.type) || !ownKeys(command, commandSchemas[command.type])) {
     throw new Error('Invalid playlist command.');
@@ -62,39 +62,23 @@ export async function youtubeCommand(command) {
       || !Array.isArray(command.videoIds) || command.videoIds.length > 500 || !command.videoIds.every(videoId)) {
       throw new Error('Provide a playlist title and valid video IDs (at most 500).');
     }
-  } else if (!['read', 'account'].includes(command.type)) {
+  } else if (!['read', 'account', 'library'].includes(command.type)) {
     throw new Error('Unknown playlist command.');
   }
 
+  // innertube.js is injected into the MAIN world by a manifest content script
+  // (world: MAIN) and exposes this helper object. See scripts/check-shared.sh.
+  const IT = globalThis.YTInnertube;
+  if (!IT) throw new Error('YouTube helper did not load. Reload YouTube and try again.');
   const cfg = window.ytcfg;
   const config = name => cfg?.get?.(name);
-  const context = config('INNERTUBE_CONTEXT');
-  if (!context?.client?.clientVersion || !context?.client?.clientName) {
-    throw new Error('YouTube session context is unavailable. Reload YouTube and try again.');
-  }
-  const accountIndex = String(config('SESSION_INDEX') ?? '0');
-  if (!/^\d{1,4}$/.test(accountIndex)) throw new Error('YouTube account identity is unavailable.');
-  const delegated = context.user?.onBehalfOfUser || config('DELEGATED_SESSION_ID') || '';
-  const dataSyncId = config('DATASYNC_ID') || '';
-  const stableIdentity = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 2048;
-  if ((!stableIdentity(dataSyncId) && !stableIdentity(delegated))
-    || (dataSyncId && !stableIdentity(dataSyncId)) || (delegated && !stableIdentity(delegated))) {
-    throw new Error('YouTube account identity is unavailable. Reload YouTube before managing playlists.');
-  }
-  const identitySeed = JSON.stringify([accountIndex, delegated, dataSyncId]);
-  async function digest(algorithm, value) {
-    const bytes = await crypto.subtle.digest(algorithm, new TextEncoder().encode(value));
-    return [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');
-  }
-  const fingerprint = await digest('SHA-256', identitySeed);
+  const context = IT.requireContext(config);
+  const { accountIndex, delegated, seed: identitySeed } = IT.accountIdentity(config);
+  const fingerprint = await IT.digestHex('SHA-256', identitySeed);
   if (command.expectedFingerprint && command.expectedFingerprint !== fingerprint) {
     throw new Error('YouTube account changed. Review the operation again.');
   }
-  const cookie = name => document.cookie.split(/;\s*/).map(part => {
-    const split = part.indexOf('=');
-    return [part.slice(0, split), part.slice(split + 1)];
-  }).find(([key]) => key === name)?.[1];
-  const sapisid = cookie('SAPISID') || cookie('__Secure-3PAPISID');
+  const sapisid = IT.getSapisid(document.cookie);
   if (!sapisid || config('LOGGED_IN') === false) throw new Error('Sign in to YouTube before managing playlists.');
   const text = value => typeof value === 'string' ? value : value?.simpleText
     || (Array.isArray(value?.runs) ? value.runs.map(run => run.text || '').join('') : '');
@@ -111,37 +95,23 @@ export async function youtubeCommand(command) {
     return output;
   }
   function assertSession() {
-    if (JSON.stringify([String(config('SESSION_INDEX') ?? '0'),
-      config('INNERTUBE_CONTEXT')?.user?.onBehalfOfUser || config('DELEGATED_SESSION_ID') || '',
-      config('DATASYNC_ID') || '']) !== identitySeed
-      || (cookie('SAPISID') || cookie('__Secure-3PAPISID')) !== sapisid
+    if (IT.accountIdentity(config).seed !== identitySeed
+      || IT.getSapisid(document.cookie) !== sapisid
       || config('LOGGED_IN') === false) {
       throw new Error('YouTube account changed. Review the operation again.');
     }
   }
   async function request(path, body, mutation = false) {
     assertSession();
-    const timestamp = Math.floor(Date.now() / 1000);
-    const hash = await digest('SHA-1', `${timestamp} ${sapisid} ${origin}`);
+    const authorization = await IT.sapisidHashHeader(sapisid);
     assertSession();
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `SAPISIDHASH ${timestamp}_${hash}`,
-      'X-Goog-AuthUser': accountIndex,
-      'X-Origin': origin,
-      'X-Youtube-Client-Version': context.client.clientVersion,
-      'X-Youtube-Client-Name': String(config('INNERTUBE_CONTEXT_CLIENT_NAME') || '1')
-    };
-    if (delegated) headers['X-Goog-PageId'] = String(delegated);
-    if (context.client.visitorData) headers['X-Goog-Visitor-Id'] = context.client.visitorData;
-    const url = new URL(`${origin}/youtubei/v1/${path}`);
-    if (config('INNERTUBE_API_KEY')) url.searchParams.set('key', config('INNERTUBE_API_KEY'));
-    url.searchParams.set('prettyPrint', 'false');
+    const headers = IT.buildHeaders({ get: config, context, authorization, accountIndex, delegated });
+    const url = { href: IT.endpointUrl(config, path) };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
     let response;
     try {
-      response = await fetch(url.href, {
+      response = await IT.fetchWithBackoff(url.href, {
         method: 'POST', credentials: 'include', headers, signal: controller.signal,
         body: JSON.stringify({ context, ...body })
       });
@@ -186,6 +156,61 @@ export async function youtubeCommand(command) {
     }, true);
     if (!id(data.playlistId)) throw new Error('Playlist creation outcome is unknown. Check your playlists before retrying.');
     return { ok: true, playlistId: data.playlistId, fingerprint };
+  }
+  if (command.type === 'library') {
+    // Saved playlists from Library > Playlists (browse FEplaylist_aggregation), following
+    // continuation pages. Only {id, title, count} leave this function, never raw responses.
+    const found = new Map();
+    const countOf = node => {
+      let best = '';
+      (function walk(value, depth) {
+        if (best || depth > 12 || !value || typeof value !== 'object') return;
+        if (Array.isArray(value)) { value.forEach(child => walk(child, depth + 1)); return; }
+        for (const child of Object.values(value)) {
+          if (typeof child === 'string' && /^\s*[\d,.]+\s+videos?\s*$/i.test(child)) { best = child.trim(); return; }
+          walk(child, depth + 1);
+        }
+      })(node, 0);
+      return best;
+    };
+    function collectLibrary(node, depth = 0) {
+      if (!node || typeof node !== 'object' || depth > 40) return;
+      if (Array.isArray(node)) { node.forEach(child => collectLibrary(child, depth + 1)); return; }
+      for (const key of ['gridPlaylistRenderer', 'playlistRenderer']) {
+        const renderer = node[key];
+        if (renderer && id(renderer.playlistId) && !found.has(renderer.playlistId)) {
+          found.set(renderer.playlistId, { id: renderer.playlistId, title: text(renderer.title).trim(),
+            count: text(renderer.videoCountShortText || renderer.videoCountText).trim() });
+        }
+      }
+      const lockup = node.lockupViewModel;
+      if (lockup && lockup.contentType === 'LOCKUP_CONTENT_TYPE_PLAYLIST' && id(lockup.contentId) && !found.has(lockup.contentId)) {
+        found.set(lockup.contentId, { id: lockup.contentId,
+          title: String(lockup.metadata?.lockupMetadataViewModel?.title?.content || '').trim(), count: countOf(lockup) });
+      }
+      for (const child of Object.values(node)) collectLibrary(child, depth + 1);
+    }
+    const nextToken = data => {
+      const tokens = containers(data, 'continuationCommand').map(item => item?.token)
+        .filter(token => typeof token === 'string' && token.length > 0 && token.length < 8192);
+      return tokens[tokens.length - 1] || null;
+    };
+    let data = await request('browse', { browseId: 'FEplaylist_aggregation' });
+    const seenTokens = new Set();
+    let pages = 1, truncated = false;
+    for (;;) {
+      collectLibrary(data);
+      const token = nextToken(data);
+      if (!token || seenTokens.has(token)) break;
+      if (pages >= 40) { truncated = true; break; }
+      seenTokens.add(token);
+      data = await request('browse', { continuation: token });
+      pages++;
+    }
+    assertSession();
+    const playlists = [...found.values()].filter(item => !['WL', 'LL'].includes(item.id))
+      .map(item => ({ ...item, title: item.title || item.id }));
+    return { ok: true, playlists, truncated, fingerprint };
   }
   if (command.type === 'playlists') {
     const data = await request('playlist/get_add_to_playlist', { videoIds: command.videoId ? [command.videoId] : [] });

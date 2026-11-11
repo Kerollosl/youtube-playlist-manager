@@ -1,3 +1,4 @@
+import { runWatchLaterSync, watchLaterStatus } from './watch-later-worker.js';
 import { youtubeCommand } from './youtube-api.js';
 import { youtubeRefresh } from './youtube-view.js';
 import { saveJob, archiveJob, hydrateJobs } from './job-store.js';
@@ -313,12 +314,21 @@ function makeIO(tabId, job) {
   };
 }
 
-chrome.action.onClicked.addListener(tab => {
-  if (tab.url?.startsWith('https://www.youtube.com/')) chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE' }).catch(() => {});
-});
-
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || !sender.tab || !sender.url?.startsWith('https://www.youtube.com/')) return;
+  if (message?.type === 'STYLES') {
+    fetch(chrome.runtime.getURL('src/ui.css')).then(response => response.text()).then(css => respond({ ok: true, css })).catch(() => respond({ ok: false }));
+    return true;
+  }
+  // One-click Watch Later sync from the in-page menu (no config UI). Same engine as the panel's "Sync now".
+  if (message?.type === 'WL_QUICK_SYNC') {
+    runWatchLaterSync().then(result => respond({ ok: true, ...result })).catch(error => respond({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === 'WL_SYNC_STATUS') {
+    watchLaterStatus().then(status => respond({ ok: true, ...status })).catch(error => respond({ ok: false, error: error.message }));
+    return true;
+  }
   // Sender identity determines the tab; webpage data cannot redirect an operation.
   const allowed = ['STOP', 'PERFORMANCE', 'SYNC_VIEW', 'READ', 'PLAYLISTS', 'STATUS', 'QUEUE', 'QUEUE_LINKS', 'DISMISS', 'FINISH_MOVE', 'CHECK_OPERATION', 'PASTE', 'TRANSFER', 'REMOVE', 'SORT', 'REORDER'];
   if (!message || !allowed.includes(message.type)) { respond({ ok: false, error: 'Unsupported action.' }); return; }

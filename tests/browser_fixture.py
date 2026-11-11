@@ -23,6 +23,7 @@ class BrowserFixture(unittest.TestCase):
         page = self.browser.new_page(viewport={'width': width, 'height': 850})
         self.addCleanup(page.close)
         page.goto(f'http://127.0.0.1:{self.server.server_port}/tools/content-fixture.html?theme={theme}&scenario={scenario}')
+        page.wait_for_function('document.querySelector("#yt-multiselect-tools")?.shadowRoot.adoptedStyleSheets.length > 0')
         page.locator('#yt-multiselect-toggle').click()
         page.wait_for_function('document.querySelector("#yt-multiselect-tools").shadowRoot.querySelector(".count").textContent.includes("5")')
         return page
@@ -228,6 +229,73 @@ class BrowserFixture(unittest.TestCase):
         page.get_by_role('button', name='Sort', exact=True).click()
         expect(page.locator('.toast')).to_contain_text('Couldn’t complete this step')
         self.assertEqual(page.locator('.yt-multiselect-checkbox:checked').count(), 1)
+    def test_watch_later_header_has_quick_sync_and_an_in_page_panel(self):
+        page = self.open_page()
+        page.locator('#yt-multiselect-toggle').click()  # Both actions work with selection off.
+        page.evaluate('''() => {
+            window.wlMessages = [];
+            const original = chrome.runtime.sendMessage;
+            chrome.runtime.sendMessage = message => {
+                if (message.type === 'WL_QUICK_SYNC') { window.wlMessages.push(message.type); return Promise.resolve(window.wlReply || {ok: true, started: true, added: 3, errors: []}); }
+                return original(message);
+            };
+            chrome.runtime.getURL = path => 'about:blank#' + path;  // the fixture has no extension origin
+        }''')
+        quick = page.get_by_role('button', name='Sync Watch Later now', exact=True)
+        self.assertTrue(quick.is_enabled())  # available with nothing selected
+        self.assertTrue(page.locator('#yt-watch-later-controls').evaluate('node => node.nextElementSibling.id === "yt-multiselect-toggle"'))
+        quick.click()
+        self.assertEqual(page.evaluate('window.wlMessages'), ['WL_QUICK_SYNC'])
+        expect(page.locator('.toast')).to_contain_text('Added 3 new videos to Watch Later')
+        expect(page.get_by_role('dialog')).to_have_count(0)
+        page.evaluate('window.wlReply = {ok:true, started:true, needsSources:true}')
+        quick.click()
+        expect(page.locator('.toast')).to_contain_text('Use the settings side')
+        expect(page.get_by_role('dialog')).to_have_count(0)
+        sync_requests = page.evaluate('window.wlMessages.length')
+        # The sync panel opens inside the page (a dialog with an embedded frame), never a new browser window.
+        pages_before = len(page.context.pages)
+        page.get_by_role('button', name='Configure Watch Later sync', exact=True).click()
+        expect(page.get_by_role('dialog')).to_be_visible()
+        self.assertEqual(page.evaluate('window.wlMessages.length'), sync_requests)
+        self.assertEqual(page.locator('iframe.wl-frame').count(), 1)
+        self.assertIn('popup.html?embed=1', page.locator('iframe.wl-frame').get_attribute('src'))
+        self.assertEqual(len(page.context.pages), pages_before)
+        page.keyboard.press('Escape')
+        self.assertEqual(page.evaluate('document.activeElement.id'), 'yt-watch-later-config')
+        # Rebuilding the masthead moves the existing control without duplicating it.
+        page.evaluate('document.querySelector("ytd-masthead #end").replaceChildren(document.createElement("div"))')
+        expect(page.locator('#yt-watch-later-controls')).to_have_count(1)
+        expect(page.locator('#yt-multiselect-toggle')).to_have_count(1)
+    def test_watch_later_split_control_fits_half_screen_without_overlapping_microphone(self):
+        for width in (960, 840, 720):
+            for theme in ('light', 'dark'):
+                with self.subTest(width=width, theme=theme):
+                    page = self.open_page(width, theme)
+                    # Model a constrained native masthead end and its adjacent microphone.
+                    page.add_style_tag(content='''
+                        ytd-masthead{display:flex;align-items:center;box-sizing:border-box}
+                        ytd-masthead #end{width:225px;flex-shrink:1;float:none}
+                        #fixture-center{display:flex;justify-content:flex-end;flex:1 1 auto;min-width:0}
+                        #fixture-mic{width:44px;height:44px;flex:none}
+                    ''')
+                    page.evaluate('''() => {
+                        const center = document.createElement('div'); center.id = 'fixture-center';
+                        const mic = document.createElement('button'); mic.id = 'fixture-mic'; mic.textContent = 'Mic';
+                        center.append(mic); document.querySelector('ytd-masthead').insertBefore(center, document.querySelector('ytd-masthead #end'));
+                    }''')
+                    mic = page.locator('#fixture-mic').bounding_box()
+                    sync = page.locator('#yt-watch-later-sync').bounding_box()
+                    config = page.locator('#yt-watch-later-config').bounding_box()
+                    toggle = page.locator('#yt-multiselect-toggle').bounding_box()
+                    self.assertLessEqual(mic['x'] + mic['width'], sync['x'])
+                    self.assertLessEqual(sync['x'] + sync['width'], config['x'])
+                    self.assertLessEqual(config['x'] + config['width'], toggle['x'])
+                    self.assertEqual(page.locator('#yt-watch-later-sync span').evaluate('node => getComputedStyle(node).display'), 'none')
+                    self.assertEqual(sync['width'], 44)
+                    self.assertEqual(config['width'], 44)
+                    self.assertLessEqual(toggle['x'] + toggle['width'], width)
+                    page.close()
     def test_sort_updates_in_place_and_clears_selection(self):
         page = self.open_page()
         # A non-consecutive selection exercises the new selected-only sort path.
@@ -273,7 +341,7 @@ class BrowserFixture(unittest.TestCase):
                 page.route('https://www.youtube.com/**', lambda route: route.fulfill(body=html, content_type='text/html'))
                 page.goto('https://www.youtube.com/playlist?list=WL')
                 page.locator('#yt-multiselect-toggle').click()
-                page.wait_for_function('document.querySelector("#yt-multiselect-tools").shadowRoot.querySelector("link").sheet !== null')
+                page.wait_for_function('document.querySelector("#yt-multiselect-tools").shadowRoot.adoptedStyleSheets.length > 0')
                 self.assertEqual(page.locator('.bar').bounding_box()['height'], 56)
                 checkbox = page.locator('.yt-multiselect-checkbox').first
                 self.assertEqual(checkbox.bounding_box()['width'], 1)
@@ -283,6 +351,50 @@ class BrowserFixture(unittest.TestCase):
                 # There is no signed-in context in this synthetic page; edits fail closed.
                 page.locator('[data-action=menu]').click()
                 self.assertTrue(page.get_by_role('menuitem', name='Delete from playlist', exact=False).is_disabled())
+                # The Watch Later panel is the extension's own page, embedded in YouTube through web_accessible_resources.
+                page.keyboard.press('Escape')
+                page.get_by_role('button', name='Configure Watch Later sync', exact=True).click()
+                popup = page.wait_for_selector('iframe.wl-frame').content_frame()
+                popup.get_by_role('heading', name='Sync to Watch Later').wait_for()
+                self.assertFalse(popup.get_by_role('button', name='Toggle multiselect on this tab').is_visible())
+                self.assertTrue(popup.get_by_label('Add a playlist by URL or ID').is_visible())
+                popup.get_by_role('button', name='Load my playlists', exact=True).click()
+                expect(popup.locator('#load-note')).to_contain_text('signed in')
+                popup.get_by_label('Add a playlist by URL or ID').press('Escape')
+                expect(page.get_by_role('dialog')).to_be_hidden()
+                self.assertEqual(page.evaluate('document.activeElement.id'), 'yt-watch-later-config')
+                self.assertEqual(len(context.pages), 1)
+            finally: context.close()
+    def test_real_extension_popup_renders_adds_source_and_toggle_hint(self):
+        root = str(Path(__file__).resolve().parents[1])
+        with tempfile.TemporaryDirectory() as profile:
+            context = self.playwright.chromium.launch_persistent_context(
+                profile, channel='chromium', headless=True,
+                args=[f'--disable-extensions-except={root}', f'--load-extension={root}'],
+                ignore_default_args=['--disable-extensions'])
+            try:
+                if not context.service_workers: context.wait_for_event('serviceworker')
+                extension_id = context.service_workers[0].url.split('/')[2]
+                page = context.new_page()
+                errors = []; page.on('pageerror', lambda e: errors.append(str(e)))
+                page.set_viewport_size({'width': 380, 'height': 700})
+                page.goto(f'chrome-extension://{extension_id}/src/popup.html')
+                self.assertTrue(page.get_by_role('button', name='Toggle multiselect on this tab').is_visible())
+                page.get_by_label('Add a playlist by URL or ID').fill('https://www.youtube.com/playlist?list=PLabcdefghij1')
+                page.get_by_role('button', name='Add', exact=True).click()
+                page.wait_for_function('document.querySelectorAll("#list input:checked").length === 1')
+                page.get_by_label('Add a playlist by URL or ID').fill('https://example.com/playlist?list=PLabcdefghij2')
+                page.get_by_role('button', name='Add', exact=True).click()
+                self.assertTrue(page.locator('#add-error').is_visible())
+                stored = page.evaluate('chrome.storage.local.get("watchLaterSources")')
+                self.assertEqual([s['id'] for s in stored['watchLaterSources']], ['PLabcdefghij1'])
+                page.reload()
+                expect(page.locator('#settings')).to_be_hidden()
+                expect(page.get_by_role('button', name='Sync now', exact=True)).to_be_enabled()
+                page.get_by_role('button', name='Playlists', exact=True).click()
+                expect(page.get_by_label('Add a playlist by URL or ID')).to_be_visible()
+                self.assertEqual(page.evaluate('document.documentElement.scrollWidth'), 380)
+                self.assertEqual(errors, [])
             finally: context.close()
     def test_group_drag_and_native_drag_after_deactivation(self):
         page = self.open_page()

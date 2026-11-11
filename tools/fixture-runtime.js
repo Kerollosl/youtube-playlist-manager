@@ -16,6 +16,7 @@ window.chrome = {
     getManifest: () => ({ version: '1.6.1' }),
     onMessage: { addListener: () => {} },
     sendMessage: async message => {
+      if (message.type === 'STYLES') return { ok: true, css: await (await fetch(new URL('../src/ui.css', location.href))).text() };
       if (message.type === 'READ') {
         fixtureReads++;
         if (url.searchParams.get('scenario') === 'delayed-unindexed') while (!window.fixtureReadReady) await new Promise(resolve => setTimeout(resolve, 10));

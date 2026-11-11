@@ -4,6 +4,17 @@ A custom Chrome extension that works directly inside YouTube. Selection controls
 
 ## Features
 
+### Version 1.7.0
+
+- A refreshed checklist icon replaces the old artwork. In YouTube’s header, **Sync** and an adjacent **settings** button share a control immediately to the left of Multiselect. Both work with selection mode off. On narrow screens, Sync keeps its icon and accessible label.
+- **Sync** immediately uses the saved playlists. **Settings** opens a small panel inside the current YouTube tab; it does not open a separate browser window. The extension popup also offers **Sync now**, with configuration behind **Playlists** after the first setup.
+- The toolbar icon now opens a popup with **Toggle multiselect on this tab** (the old one-click toolbar toggle; the header select button on YouTube still works) and **Sync to Watch Later**, merged in from the standalone youtube-watch-later-sync extension.
+- **Sync to Watch Later** lists the playlists you saved to your YouTube library (Library > Playlists, all continuation pages) plus your own. Press **Load my playlists** (needs a signed-in YouTube; a background tab opens if none is open), tick playlists, filter, All/None act on the filtered rows. **Add by URL or ID** remains as a fallback. The ticked list is stored in `chrome.storage.local` under `watchLaterSources`.
+- **Sync now** is manual only: it reads each playlist's public RSS feed, skips videos already in Watch Later or already recorded, adds new ones oldest first, verifies Watch Later afterwards, and leaves the last-sync time unchanged when anything fails so it retries. A different signed-in account resets the added-videos record. HTTP 429 is retried with backoff by the shared InnerTube helper.
+- **Export list / Import list** save and merge the playlists as a JSON file so reinstalling never loses them. Sync state uses separate `wl*` storage keys.
+- No new permissions. Only the embedded panel’s HTML entry point is web-accessible, restricted to YouTube. `npm test` covers the picker, sync decisions, popup state, embedded message authorization, account changes, and failed verification. `python tests/browser_fixture.py` includes Chromium rendering checks; these and live YouTube still need verification when browser access is available.
+
+
 - **History, Playlists, and Watch Later shortcuts** above You in the compact left sidebar, available even with selection mode off. Shortcuts reuse mounted native navigation entries for in-page transitions; ordinary links remain available as a fallback.
 - Toggle selection mode, then click anywhere on a video card to select or deselect it. Selected cards use a subtle blue tint. No visible checkbox covers YouTube’s buttons; keyboard and screen-reader selection remain available.
 - Use the toolbar’s checkbox to select all, show a partial selection, or deselect all.

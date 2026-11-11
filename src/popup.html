@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Multiselect Tools for Playlists</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="head">
+      <img class="mark" src="../icons/icon48.png" alt="" width="28" height="28">
+      <h1>Multiselect Tools for Playlists</h1>
+    </header>
+
+    <section class="block" aria-labelledby="sel-h">
+      <h2 id="sel-h">Select videos</h2>
+      <button id="toggle" class="btn primary" type="button">Toggle multiselect on this tab</button>
+      <p id="toggle-note" class="note" role="status"></p>
+    </section>
+
+    <section class="block" aria-labelledby="wl-h">
+      <h2 id="wl-h">Sync to Watch Later</h2>
+      <p id="source-count" class="note" role="status"></p>
+      <div class="row sync-actions">
+        <button id="sync" class="btn primary grow" type="button" disabled>Sync now</button>
+        <button id="settings-toggle" class="btn" type="button" aria-expanded="false" aria-controls="settings">Playlists</button>
+      </div>
+      <div id="progress" class="progress" hidden>
+        <div class="track"><div id="fill" class="fill"></div></div>
+        <p id="progress-text" class="note" role="status"></p>
+      </div>
+      <p id="last" class="note" role="status"></p>
+      <p id="sync-result" class="note" role="status"></p>
+
+      <div id="settings" class="settings" hidden>
+        <p class="note">Choose playlists once. New uploads are added when you sync.</p>
+
+        <div class="row">
+          <button id="load" class="btn" type="button">Load my playlists</button>
+          <span id="load-note" class="note grow" role="status"></span>
+        </div>
+
+        <div class="row">
+          <label class="visually-hidden" for="filter">Filter playlists</label>
+          <input id="filter" class="grow" type="search" placeholder="Filter playlists" autocomplete="off" spellcheck="false">
+          <button id="all" class="btn small" type="button">All</button>
+          <button id="none" class="btn small" type="button">None</button>
+        </div>
+
+        <ul id="list" class="list" aria-label="Playlists to sync"></ul>
+        <p id="empty" class="note" hidden></p>
+
+        <form id="add" class="row" autocomplete="off">
+          <label class="visually-hidden" for="add-input">Add a playlist by URL or ID</label>
+          <input id="add-input" class="grow" type="text" placeholder="Add by playlist URL or ID" spellcheck="false">
+          <button class="btn small" type="submit">Add</button>
+        </form>
+        <p id="add-error" class="note err" role="alert" hidden></p>
+
+        <div class="row">
+          <button id="export" class="btn small" type="button">Export list</button>
+          <button id="import" class="btn small" type="button">Import list</button>
+          <input id="import-file" type="file" accept="application/json,.json" hidden>
+          <span id="io-note" class="note grow" role="status"></span>
+        </div>
+      </div>
+
+      <details class="log">
+        <summary>Activity <span id="log-count"></span></summary>
+        <ol id="log-list"></ol>
+      </details>
+    </section>
+
+    <p class="note fine">Unofficial: not affiliated with or endorsed by YouTube or Google. Uses YouTube's private web endpoints and your signed-in session on youtube.com. Nothing leaves your device except requests to youtube.com.</p>
+  </main>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

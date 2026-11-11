@@ -1,12 +1,35 @@
 (() => {
   'use strict';
   if (document.getElementById('yt-multiselect-tools')) return;
-  const ROWS = 'ytd-playlist-video-renderer,ytd-playlist-panel-video-renderer,ytd-video-renderer,ytd-rich-item-renderer,ytd-grid-video-renderer';
+  // Every YouTube DOM selector lives here. They are third-party markup that
+  // can change without notice: verify them on the live page before editing a
+  // value. Each use site fails soft (does nothing) when a selector matches nothing.
+  const SELECTORS = {
+    app: 'ytd-app',
+    rows: 'ytd-playlist-video-renderer,ytd-playlist-panel-video-renderer,ytd-video-renderer,ytd-rich-item-renderer,ytd-grid-video-renderer',
+    playlistRow: 'ytd-playlist-video-renderer',
+    browsePage: 'ytd-browse',
+    pageChildren: 'ytd-page-manager > *',
+    pageManager: 'ytd-page-manager',
+    masthead: 'ytd-masthead',
+    mastheadEnd: 'ytd-masthead #end',
+    mastheadButtons: '#buttons',
+    miniGuide: 'ytd-mini-guide-renderer',
+    miniGuideItems: 'ytd-mini-guide-renderer #items',
+    chrome: 'ytd-mini-guide-renderer,ytd-masthead',
+    guideLinks: 'ytd-guide-renderer a[href],ytd-mini-guide-renderer a[href]:not(.yt-multiselect-sidebar-link)',
+    miniGuideEntry: 'ytd-mini-guide-entry-renderer',
+    duration: 'ytd-thumbnail-overlay-time-status-renderer #text, ytd-thumbnail-overlay-time-status-renderer span',
+    titleLink: 'a#video-title,a#video-title-link',
+    videoLink: 'a[href*="/watch?v="],a[href*="/shorts/"]',
+    index: '#index',
+    channel: '#channel-name,#byline-container'
+  };
+  const ROWS = SELECTORS.rows;
   const host = document.createElement('div');
   host.id = 'yt-multiselect-tools';
   const root = host.attachShadow({ mode: 'open' });
-  root.innerHTML = `<link rel="stylesheet" href="${chrome.runtime.getURL('src/ui.css')}">
-  <div class="bar" role="toolbar" aria-label="Selected videos" aria-busy="false" hidden>
+  root.innerHTML = `<div class="bar" role="toolbar" aria-label="Selected videos" aria-busy="false" hidden>
     <button class="icon" data-action="close" title="Close selection" aria-label="Close selection">${svg('close')}</button>
     <button class="icon" data-action="all" role="checkbox" aria-checked="false" title="Select all" aria-label="Select all">${svg('clear')}</button>
     <span class="selection-info" aria-live="polite"><span class="count">0 selected</span><span class="duration" hidden></span></span>
@@ -20,22 +43,41 @@
     <div class="menu" role="menu" aria-label="Selection actions" hidden></div>
     <div class="panel" hidden></div>
   </div><div class="toast" role="status" hidden></div><div class="backdrop" hidden></div>`;
-  (document.querySelector('ytd-app') || document.documentElement).append(host);
-  function syncTheme() { host.dataset.theme = document.documentElement.hasAttribute('dark') ? 'dark' : 'light'; }
+  (document.querySelector(SELECTORS.app) || document.documentElement).append(host);
+  // Styles are applied from the extension's own stylesheet text, so no
+  // extension file has to be web-accessible to youtube.com pages.
+  (async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'STYLES' });
+      if (!response?.css) return;
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(response.css);
+      root.adoptedStyleSheets = [sheet];
+    } catch {}
+  })();
+  function syncTheme() {
+    host.dataset.theme = document.documentElement.hasAttribute('dark') ? 'dark' : 'light';
+    const frame = root.querySelector('.wl-frame');
+    frame?.contentWindow?.postMessage({ type: 'WL_THEME', theme: host.dataset.theme }, panelOrigin());
+  }
+  function panelOrigin() { const url = new URL(chrome.runtime.getURL(''), location.href); return `${url.protocol}//${url.host}`; }
   syncTheme();
   new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['dark'] });
   const bar = root.querySelector('.bar'), menu = root.querySelector('.menu'), backdrop = root.querySelector('.backdrop'), panel = root.querySelector('.panel');
+  let noRowsTimer = null; const noRowsNotified = new Set();
   const selected = new Map(), rowBoxes = new WeakMap(), wiredRows = new WeakSet(), dragAttributes = new WeakMap();
   let groupDrag = null, dropRow = null, scrollFrame = null, scrollSpeed = 0;
   let enabled = false, scope = navigationScope(), snapshot = null, toggleButton, timer, toastTimer, lastAnchor = null, working = false, readPending = false, needsReload = false, dialogFocus, noticeRevision = 0, introduced = false;
   let operationStatus = { activeJob: null, queue: null, history: [], busy: false };
+  let watchLaterControls, headerSyncButton, headerConfigButton, watchLaterBusy = false;
 
   function svg(name) {
+    if (name === 'settings') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m19.4 13 .1-1-.1-1 2-1.6-2-3.4-2.4 1a8 8 0 0 0-1.7-1L15 3h-4l-.4 3a8 8 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6-.1 1 .1 1-2 1.6 2 3.4 2.4-1a8 8 0 0 0 1.7 1l.4 3h4l.4-3a8 8 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6ZM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7Z"/></svg>';
     if (name === 'playlists') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h14v2H3V4Zm0 5h14v2H3V9Zm0 5h8v2H3v-2Zm0 5h8v2H3v-2Zm12-6 7 4-7 4v-8Z"></path></svg>';
     if (name === 'watchLater') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm-1 3v6l5 3 1-1.7-4-2.3V7h-2Z"></path></svg>';
     if (name === 'history') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1-9.8 12h2.1A8 8 0 1 0 6.3 6.3L9 9H2V2l2.9 2.9A10 10 0 0 1 12 2Zm-1 5h2v5.4l4 2.3-1 1.7-5-2.9V7Z"></path></svg>';
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
-    const paths = { summary: "M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3 3-7Z", mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.64 7.64a3.5 3.5 0 1 0-1.41 1.41L11.17 12l-2.94 2.95a3.5 3.5 0 1 0 1.41 1.41L12.59 13.4 18 18.81V16l-4-4 4-4V5.19l-5.41 5.41-2.95-2.96ZM6.5 8A1.5 1.5 0 1 1 6.5 5a1.5 1.5 0 0 1 0 3Zm0 11a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
+    const paths = { history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z', sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z', summary: "M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3 3-7Z", mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.64 7.64a3.5 3.5 0 1 0-1.41 1.41L11.17 12l-2.94 2.95a3.5 3.5 0 1 0 1.41 1.41L12.59 13.4 18 18.81V16l-4-4 4-4V5.19l-5.41 5.41-2.95-2.96ZM6.5 8A1.5 1.5 0 1 1 6.5 5a1.5 1.5 0 0 1 0 3Zm0 11a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]}"></path></svg>`;
   }
   function element(tag, text, className) { const node = document.createElement(tag); if (text) node.textContent = text; if (className) node.className = className; return node; }
@@ -44,7 +86,7 @@
   function navigationScope() { const url = new URL(location.href); return url.searchParams.get('list') ? `playlist:${url.searchParams.get('list')}` : `${url.pathname}?${url.searchParams.toString()}`; }
   function validVideo(item) { return /^[A-Za-z0-9_-]{11}$/.test(item?.videoId || ''); }
   function rowDuration(row) {
-    const text = row.querySelector('ytd-thumbnail-overlay-time-status-renderer #text, ytd-thumbnail-overlay-time-status-renderer span')?.textContent.trim();
+    const text = row.querySelector(SELECTORS.duration)?.textContent.trim();
     if (!/^\d+(?::[0-5]\d){1,2}$/.test(text || '')) return null;
     return text.split(':').reduce((total, part) => total * 60 + Number(part), 0);
   }
@@ -84,12 +126,12 @@
   }
   function canonical(item) { return { ...item, key: item.setVideoId ? `entry:${item.setVideoId}` : item.key }; }
   function info(row) {
-    const anchor = row.querySelector('a#video-title,a#video-title-link') || row.querySelector('a[href*="/watch?v="],a[href*="/shorts/"]');
+    const anchor = row.querySelector(SELECTORS.titleLink) || row.querySelector(SELECTORS.videoLink);
     if (!anchor) return null;
     let url; try { url = new URL(anchor.href, location.origin); } catch { return null; }
     const videoId = url.searchParams.get('v') || url.pathname.match(/^\/shorts\/([A-Za-z0-9_-]{11})/)?.[1];
     if (!/^[A-Za-z0-9_-]{11}$/.test(videoId || '')) return null;
-    const indexText = url.searchParams.get('index') || row.querySelector('#index')?.textContent.trim();
+    const indexText = url.searchParams.get('index') || row.querySelector(SELECTORS.index)?.textContent.trim();
     const index = /^[0-9]+$/.test(indexText || '') ? Number(indexText) - 1 : null;
     let exact = null;
     if (snapshot?.complete && snapshot.playlistId === playlistId()) {
@@ -98,14 +140,14 @@
     }
     if (exact?.setVideoId) return canonical({ ...exact, durationSeconds: exact.durationSeconds ?? rowDuration(row) });
     const list = playlistId();
-    return { key: list && index !== null ? `row:${list}:${videoId}:${index}` : `row:${scope}:${videoId}`, videoId, index, title: anchor.getAttribute('title') || anchor.textContent.trim() || videoId, channel: row.querySelector('#channel-name,#byline-container')?.textContent.trim() || '', durationSeconds: rowDuration(row), playlistId: list };
+    return { key: list && index !== null ? `row:${list}:${videoId}:${index}` : `row:${scope}:${videoId}`, videoId, index, title: anchor.getAttribute('title') || anchor.textContent.trim() || videoId, channel: row.querySelector(SELECTORS.channel)?.textContent.trim() || '', durationSeconds: rowDuration(row), playlistId: list };
   }
   function loadedRows() {
     const visible = node => node.getClientRects().length > 0 && !node.closest('[hidden],[aria-hidden="true"]');
     const playlistPage = location.pathname === '/playlist';
-    const pages = [...document.querySelectorAll(playlistPage ? 'ytd-browse' : 'ytd-page-manager > *')].filter(visible);
+    const pages = [...document.querySelectorAll(playlistPage ? SELECTORS.browsePage : SELECTORS.pageChildren)].filter(visible);
     const page = pages[pages.length - 1] || document;
-    const selector = playlistPage ? 'ytd-playlist-video-renderer' : ROWS;
+    const selector = playlistPage ? SELECTORS.playlistRow : ROWS;
     return [...page.querySelectorAll(selector)].filter(row => visible(row) && !row.parentElement?.closest(ROWS)).map(row => ({ row, item: info(row) })).filter(entry => entry.item);
   }
   function reconcileSnapshot() {
@@ -123,7 +165,7 @@
     if (needsReload || !selected.size || !snapshot?.complete) return false;
     return [...selected.values()].every(item => item.setVideoId && byOccurrence.get(item.setVideoId)?.videoId === item.videoId);
   }
-  function canReorder(entries) { return exactSelection() && snapshot.editable && snapshot.canReorder && (entries || loadedRows()).some(entry => entry.row.matches('ytd-playlist-video-renderer')); }
+  function canReorder(entries) { return exactSelection() && snapshot.editable && snapshot.canReorder && (entries || loadedRows()).some(entry => entry.row.matches(SELECTORS.playlistRow)); }
   function selectionArgs() {
     if (!exactSelection()) throw new Error('Wait for the playlist to load, then select its videos again. Copy links works now.');
     return { playlistId: snapshot.playlistId, keys: [...selected.values()].map(item => item.setVideoId), expectedFingerprint: snapshot.fingerprint };
@@ -189,14 +231,41 @@
     notice('Click videos to select. Shift-click selects a range.', 'Got it', () => notice(''));
   }
   function mountToggle() {
-    const end = document.querySelector('ytd-masthead #end');
+    const end = document.querySelector(SELECTORS.mastheadEnd);
     if (!end) return;
     if (!toggleButton?.isConnected) {
       toggleButton = element('button'); toggleButton.id = 'yt-multiselect-toggle'; toggleButton.type = 'button';
       toggleButton.title = 'Select videos'; toggleButton.setAttribute('aria-label', 'Select videos'); toggleButton.innerHTML = svg('toggle');
       toggleButton.setAttribute('aria-pressed', String(enabled)); toggleButton.addEventListener('click', () => toggle(!enabled));
-      end.insertBefore(toggleButton, end.querySelector('#buttons') || end.firstChild);
+      end.insertBefore(toggleButton, end.querySelector(SELECTORS.mastheadButtons) || end.firstChild);
     }
+    if (!watchLaterControls) {
+      watchLaterControls = element('div'); watchLaterControls.id = 'yt-watch-later-controls';
+      watchLaterControls.setAttribute('role', 'group'); watchLaterControls.setAttribute('aria-label', 'Watch Later sync');
+      headerSyncButton = button('', quickWatchLaterSync, 'yt-watch-later-sync');
+      headerSyncButton.id = 'yt-watch-later-sync';
+      headerSyncButton.innerHTML = `${svg('sync')}<span>Sync</span>`;
+      headerSyncButton.title = 'Sync chosen playlists to Watch Later';
+      headerSyncButton.setAttribute('aria-label', 'Sync Watch Later now');
+      headerConfigButton = button('', watchLaterDialog, 'yt-watch-later-config');
+      headerConfigButton.id = 'yt-watch-later-config'; headerConfigButton.innerHTML = svg('settings');
+      headerConfigButton.title = 'Configure Watch Later sync'; headerConfigButton.setAttribute('aria-label', 'Configure Watch Later sync');
+      headerConfigButton.setAttribute('aria-haspopup', 'dialog'); headerConfigButton.setAttribute('aria-expanded', 'false');
+      // These are independent actions, not a shared click target in YouTube's header.
+      for (const control of [headerSyncButton, headerConfigButton]) control.addEventListener('click', event => event.stopPropagation());
+      watchLaterControls.append(headerSyncButton, headerConfigButton);
+    }
+    if (watchLaterControls.nextElementSibling !== toggleButton) end.insertBefore(watchLaterControls, toggleButton);
+    updateWatchLaterControls();
+  }
+  function updateWatchLaterControls() {
+    if (!headerSyncButton) return;
+    const busy = quickSyncPending || watchLaterBusy;
+    headerSyncButton.disabled = busy;
+    headerSyncButton.setAttribute('aria-label', busy ? 'Syncing Watch Later' : 'Sync Watch Later now');
+    watchLaterControls.setAttribute('aria-busy', String(busy));
+    const label = headerSyncButton.querySelector('span'), text = busy ? 'Syncing…' : 'Sync';
+    if (label.textContent !== text) label.textContent = text;
   }
   const sidebarShortcuts = [
     { key: 'history', label: 'History', href: '/feed/history' },
@@ -211,9 +280,9 @@
   }
   function mountSidebarShortcuts() {
     // The expanded guide already supplies these links. Only extend the compact rail.
-    for (const items of document.querySelectorAll('ytd-mini-guide-renderer #items')) {
+    for (const items of document.querySelectorAll(SELECTORS.miniGuideItems)) {
       const nativeLinks = [...items.querySelectorAll('a[href]:not(.yt-multiselect-sidebar-link)')];
-      const you = nativeLinks.find(anchor => new URL(anchor.href, location.origin).pathname === '/feed/you')?.closest('ytd-mini-guide-entry-renderer');
+      const you = nativeLinks.find(anchor => new URL(anchor.href, location.origin).pathname === '/feed/you')?.closest(SELECTORS.miniGuideEntry);
       let before = you;
       // Insert in reverse so existing shortcuts stay in place during ordinary scans.
       for (const shortcut of you ? [...sidebarShortcuts].reverse() : sidebarShortcuts) {
@@ -230,7 +299,7 @@
           link.append(element('span', shortcut.label));
           link.addEventListener('click', event => {
             if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            const native = [...document.querySelectorAll('ytd-guide-renderer a[href],ytd-mini-guide-renderer a[href]:not(.yt-multiselect-sidebar-link)')].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
+            const native = [...document.querySelectorAll(SELECTORS.guideLinks)].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
             // Reuse YouTube's router when its native entry is mounted. Normal links
             // remain the fallback, including open-in-new-tab and modified clicks.
             if (native) { event.preventDefault(); native.click(); }
@@ -246,7 +315,8 @@
     }
   }
   function scan() {
-    if (!host.isConnected) (document.querySelector('ytd-app') || document.documentElement).append(host);
+    if (!observing?.length) observeTargets();
+    if (!host.isConnected) (document.querySelector(SELECTORS.app) || document.documentElement).append(host);
     mountToggle();
     mountSidebarShortcuts();
     if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); setSnapshot(null); lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
@@ -255,6 +325,9 @@
       update(); return;
     }
     const entries = loadedRows(), currentRows = new Set(entries.map(entry => entry.row)), reorderable = canReorder(entries);
+    // Fail soft if YouTube's markup changed: say so once instead of silently doing nothing.
+    clearTimeout(noRowsTimer);
+    if (!entries.length) noRowsTimer = setTimeout(() => { if (enabled && !loadedRows().length && !noRowsNotified.has(scope)) { noRowsNotified.add(scope); notice('No videos found on this page. If YouTube recently changed its layout, selection may not work here yet.'); } }, 5000);
     for (const row of document.querySelectorAll('.yt-multiselect-row')) if (!currentRows.has(row)) releaseRow(row);
     for (const { row, item } of entries) {
       let checkbox = rowBoxes.get(row);
@@ -350,6 +423,41 @@
     add('trash', 'Delete from playlist…', editReason || 'Review titles before permanent removal', deleteSelected, Boolean(editReason), true);
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
+  // One click: run a Watch Later sync with the saved playlists and report the result in the status toast.
+  let quickSyncPending = false;
+  async function quickWatchLaterSync() {
+    if (quickSyncPending) { announce('A Watch Later sync is already running.'); return; }
+    quickSyncPending = true;
+    updateWatchLaterControls();
+    try {
+      announce('Syncing Watch Later…');
+      const result = await chrome.runtime.sendMessage({ type: 'WL_QUICK_SYNC' });
+      if (!result?.ok) throw new Error(result?.error || 'Watch Later sync failed.');
+      if (result.needsSources) announce('No playlists selected. Use the settings side to choose playlists, then press Sync.');
+      else if (result.started === false) announce('A Watch Later sync is already running.');
+      else if (result.error) announce(`Watch Later sync stopped: ${result.error}`);
+      else if (result.aborted) announce('Watch Later sync stopped early. Open sync settings for details.');
+      else {
+        const added = result.added || 0, failed = Array.isArray(result.errors) ? result.errors.length : Number(result.errors) || 0;
+        announce(added ? `Added ${added} new ${added === 1 ? 'video' : 'videos'} to Watch Later${failed ? ` (${failed} failed)` : ''}.` : failed ? `Nothing added; ${failed} failed. See the sync log.` : 'Watch Later is up to date. Nothing new to add.');
+      }
+    } finally { quickSyncPending = false; updateWatchLaterControls(); }
+  }
+  // The sync panel (the extension's popup page) as a mini window inside YouTube, not a separate browser window.
+  function watchLaterDialog() {
+    const body = dialog('Watch Later Sync'); body.classList.add('wl-dialog');
+    headerConfigButton?.setAttribute('aria-expanded', 'true');
+    const frame = document.createElement('iframe');
+    frame.className = 'wl-frame'; frame.title = 'Watch Later Sync';
+    frame.src = `${chrome.runtime.getURL('src/popup.html?embed=1&configure=1')}&theme=${host.dataset.theme}`;
+    body.append(frame);
+  }
+  window.addEventListener('message', event => {
+    const frame = backdrop.querySelector('.wl-frame');
+    if (!frame || event.source !== frame.contentWindow || event.origin !== panelOrigin()) return;
+    if (event.data?.type === 'WL_CLOSE_PANEL') closeDialog();
+    if (event.data?.type === 'WL_PANEL_FOCUS_CLOSE') backdrop.querySelector('.dialog-header button')?.focus();
+  });
   async function copyLinks(items = [...selected.values()]) {
     const text = links(items); if (!text) return;
     try { await navigator.clipboard.writeText(text); deselect(); announce(`${items.length} links copied. Paste into NotebookLM.`); }
@@ -406,9 +514,9 @@
       }
     } catch { /* Current playlist remains available if the picker is unavailable. */ }
   }
-  function closeDialog() { if (backdrop.hidden) return; backdrop.hidden = true; backdrop.replaceChildren(); dialogFocus?.focus?.(); }
+  function closeDialog() { if (backdrop.hidden) return; backdrop.hidden = true; backdrop.replaceChildren(); headerConfigButton?.setAttribute('aria-expanded', 'false'); dialogFocus?.focus?.(); }
   function dialog(title) {
-    dialogFocus = root.activeElement || document.activeElement; if (menu.contains(dialogFocus)) dialogFocus = root.querySelector('[data-action="menu"]'); showMenu(false); backdrop.replaceChildren(); backdrop.hidden = false;
+    dialogFocus = root.activeElement || document.activeElement; if (menu.contains(dialogFocus)) dialogFocus = root.querySelector('[data-action="menu"]'); headerConfigButton?.setAttribute('aria-expanded', 'false'); showMenu(false); backdrop.replaceChildren(); backdrop.hidden = false;
     const body = element('section', '', 'dialog'); body.setAttribute('role', 'dialog'); body.setAttribute('aria-modal', 'true'); body.setAttribute('aria-label', title); body.tabIndex = -1; const header = element('div', '', 'dialog-header'), close = button('', closeDialog, 'icon'); close.innerHTML = svg('close'); close.setAttribute('aria-label', 'Close dialog'); header.append(element('h2', title), close); body.append(header); backdrop.append(body); body.focus(); return body;
   }
   function footer(body, text, handler, danger = false) {
@@ -480,7 +588,7 @@
     window.scrollBy(0, scrollSpeed);
     scrollFrame = requestAnimationFrame(dragScroll);
   }
-  function dragRow(event) { return event.target instanceof Element ? event.target.closest('ytd-playlist-video-renderer') : null; }
+  function dragRow(event) { return event.target instanceof Element ? event.target.closest(SELECTORS.playlistRow) : null; }
   function dragTarget(event) {
     const row = dragRow(event), item = row && info(row);
     if (!item?.setVideoId || groupDrag.selectedIds.has(item.setVideoId)) return null;
@@ -693,7 +801,7 @@
     if (!panel.hidden && event.key === 'Escape') { event.preventDefault(); closePanel(); root.querySelector('[data-action="menu"]').focus(); return; }
     if (!backdrop.hidden) {
       if (event.key === 'Escape') { event.preventDefault(); closeDialog(); return; }
-      if (event.key === 'Tab') { const nodes = [...backdrop.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,summary')].filter(node => node.getClientRects().length); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1], active = root.activeElement; if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
+      if (event.key === 'Tab') { const nodes = [...backdrop.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,summary,iframe')].filter(node => node.getClientRects().length); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1], active = root.activeElement; if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
       return;
     }
     if (!menu.hidden && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
@@ -709,16 +817,30 @@
     const key = event.key.toLowerCase(), handler = key === 'c' && event.shiftKey && selected.size ? () => queueSelection('copy') : key === 'c' && selected.size ? () => copyLinks() : key === 'x' && exactSelection() && snapshot.editable ? cutDialog : key === 'v' && playlistId() ? pasteDialog : key === 'a' ? selectAll : null;
     if (handler) { event.preventDefault(); Promise.resolve().then(handler).catch(report); }
   });
-  new MutationObserver(mutations => {
-    if (mutations.every(mutation => mutation.target === host || mutation.target === toggleButton || mutation.target.closest?.('#yt-multiselect-toggle') || [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1 || node.classList?.contains('yt-multiselect-checkbox')))) return;
-    if (!enabled && !mutations.some(mutation => mutation.target.closest?.('ytd-mini-guide-renderer,ytd-masthead') || [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 && (node === host || node.matches('ytd-mini-guide-renderer,ytd-masthead') || node.querySelector('ytd-mini-guide-renderer,ytd-masthead'))))) return;
+  const pageObserver = new MutationObserver(mutations => {
+    if (mutations.every(mutation => mutation.target === host || mutation.target === toggleButton || mutation.target.closest?.('#yt-multiselect-toggle,#yt-watch-later-controls') || [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1 || node.classList?.contains('yt-multiselect-checkbox')))) return;
+    if (!enabled && !mutations.some(mutation => mutation.target.closest?.(SELECTORS.chrome) || [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 && (node === host || node.matches(SELECTORS.chrome) || node.querySelector(SELECTORS.chrome))))) return;
     // Coalesce into one pending scan without postponing it through continuous renders.
     if (!timer) timer = setTimeout(() => { timer = null; scan(); }, enabled ? 120 : 0);
-  }).observe(document.body || document.documentElement, { childList: true, subtree: true });
-  document.addEventListener('yt-navigate-finish', () => { closeDialog(); scan(); });
+  });
+  // Watch YouTube's page area and header/guide rails instead of the whole body.
+  // Falls back to the body until those containers exist, then re-targets.
+  let observing = null;
+  function observeTargets() {
+    let found = [...new Set([...document.querySelectorAll(`${SELECTORS.pageManager},${SELECTORS.masthead},${SELECTORS.miniGuide}`)])];
+    // Without the page container (unknown layout) watch the whole body rather than miss rows.
+    if (!found.some(node => node.matches(SELECTORS.pageManager))) found = [];
+    if (observing && found.length === observing.length && found.every((node, index) => node === observing[index])) return;
+    pageObserver.disconnect();
+    observing = found;
+    for (const node of found.length ? found : [document.body || document.documentElement]) pageObserver.observe(node, { childList: true, subtree: true });
+  }
+  observeTargets();
+  document.addEventListener('yt-navigate-finish', () => { observeTargets(); closeDialog(); scan(); });
   chrome.runtime.onMessage?.addListener(message => { if (message.type === 'TOGGLE') toggle(!enabled); });
   chrome.storage?.onChanged?.addListener((changes, area) => {
     if (area !== 'local') return;
+    if (changes.wlSyncInProgress) { watchLaterBusy = Boolean(changes.wlSyncInProgress.newValue); updateWatchLaterControls(); }
     if (!changes.activeJob && !changes.queue && !changes.history && !changes.historyCount) return;
     statusRevision++;
     for (const key of ['activeJob', 'queue']) if (changes[key]) operationStatus[key] = changes[key].newValue || null;
@@ -727,4 +849,15 @@
     update();
   });
   scan();
+  send('WL_SYNC_STATUS').then(status => { watchLaterBusy = Boolean(status.running); updateWatchLaterControls(); }).catch(() => {});
+  // First run: say where the toolbar icon is, once.
+  (async () => {
+    try {
+      if (!chrome.storage?.local?.get) return;
+      const stored = await chrome.storage.local.get('toolbarHintSeen');
+      if (stored.toolbarHintSeen) return;
+      await chrome.storage.local.set({ toolbarHintSeen: true });
+      notice('To select videos, click this extension\'s toolbar icon (puzzle-piece menu, then pin it) or the select button in YouTube\'s header.', 'Got it', () => notice(''));
+    } catch {}
+  })();
 })();

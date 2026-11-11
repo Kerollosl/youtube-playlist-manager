@@ -2,7 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { webcrypto, createHash } from 'node:crypto';
+import fs from 'node:fs';
 import { youtubeCommand } from '../src/youtube-api.js';
+
+const INNERTUBE_SOURCE = fs.readFileSync(new URL('../src/innertube.js', import.meta.url), 'utf8');
 
 const VIDEO = 'abcdefghijk';
 const OTHER = 'lmnopqrstuv';
@@ -54,7 +57,9 @@ function page(responses, configOverrides = {}) {
     }
   };
   // This verifies that Chrome's serialized function has no module closures.
-  const run = vm.runInNewContext(`(${youtubeCommand.toString()})`, sandbox);
+  vm.createContext(sandbox);
+  vm.runInContext(INNERTUBE_SOURCE, sandbox); // what the MAIN-world content script provides
+  const run = vm.runInContext(`(${youtubeCommand.toString()})`, sandbox);
   return { run, calls, config, document: sandbox.document };
 }
 

@@ -1,9 +1,28 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Multiselect",
-  "version": "1.6.1",
-  "description": "Fast YouTube playlist multiselect with batched saves, verified moves, plain-text links, and recovery.",
-  "minimum_chrome_version": "120",
+  "name": "Multiselect Tools for Playlists",
+  "version": "1.7.0",
+  "description": "Multiselect, batch save, move and sort for YouTube playlists, plus sync new uploads from chosen playlists to Watch Later.",
+  "author": "Kerollos Lowandy",
+  "minimum_chrome_version": "111",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Multiselect Tools for Playlists",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_popup": "src/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
   "permissions": [
     "storage",
     "scripting",
@@ -12,14 +31,27 @@
   "host_permissions": [
     "https://www.youtube.com/*"
   ],
-  "background": {
-    "service_worker": "src/background.js",
-    "type": "module"
-  },
-  "action": {
-    "default_title": "Toggle multiselect in YouTube"
-  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/popup.html"
+      ],
+      "matches": [
+        "https://www.youtube.com/*"
+      ]
+    }
+  ],
   "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
+      "js": [
+        "src/innertube.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
     {
       "matches": [
         "https://www.youtube.com/*"
@@ -30,21 +62,6 @@
       "run_at": "document_idle",
       "css": [
         "src/page.css"
-      ]
-    }
-  ],
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "src/ui.css"
-      ],
-      "matches": [
-        "https://www.youtube.com/*"
       ]
     }
   ]

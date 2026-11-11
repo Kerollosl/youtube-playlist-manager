@@ -50,6 +50,15 @@ await import('../src/background.js');
 const sender = { id: 'test-extension', url: 'https://www.youtube.com/playlist?list=WL', tab: { id: 7 } };
 const send = message => new Promise(resolve => listener(message, sender, resolve));
 
+test('masthead status reflects an existing sync without starting another', async () => {
+  reset();
+  data.wlSyncInProgress = true;
+  const result = await send({ type: 'WL_SYNC_STATUS' });
+  assert.equal(result.ok, true);
+  assert.equal(result.running, true);
+  assert.deepEqual(edits, []);
+});
+
 test('cut queues durable entries without issuing mutations', async () => {
   reset();
   const result = await send({ type: 'QUEUE', kind: 'move', playlistId: 'WL', keys: ['one'], expectedFingerprint: fingerprints });

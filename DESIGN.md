@@ -16,6 +16,10 @@ Selected cards keep YouTube’s layout and use its ten-percent neutral layer. Le
 
 ## Interaction and feedback
 
+A native-style split control sits immediately to the left of the masthead’s Multiselect button. Sync runs the saved Watch Later sources; the adjacent gear opens playlist configuration inside a compact modal in the same tab. Both actions remain available with selection off. At narrow widths, Sync’s text hides while both labeled icon buttons retain 44px targets. Running sync disables its action and shows Syncing; configuration stays accessible for progress and activity. Masthead rerenders restore one copy in the same position.
+
+The embedded panel follows YouTube’s theme, supports Escape and focus restoration, and shows playlist configuration when opened from the gear. The extension action popup puts Sync now before configuration; Playlists is collapsed once sources exist. First use opens the picker. The header’s Sync side never opens configuration: when no sources are saved, it shows a notice directing the user to Settings. At desktop widths of 1200px and below, the header control uses two 44px icon buttons. The masthead’s end section reserves its full content width so search and microphone controls do not overlap it.
+
 Full-card click and Shift-click range selection remain available. The master checkbox represents none, some, or all videos selected. More supports Arrow Up/Down, Home, End, and Escape. Dialogs trap keyboard focus and restore it on close; anchored panels use nonmodal region semantics. All controls retain visible focus states.
 
 Operations show verified progress in the selection bar with a slim progress indicator. Checkpoint notifications update this inline status rather than producing repeated toasts. Reduced motion disables indicator animation. Completion notices are brief; errors retain a Details action and collapsed technical diagnostics.
