@@ -16,8 +16,11 @@
     mastheadButtons: '#buttons',
     miniGuide: 'ytd-mini-guide-renderer',
     miniGuideItems: 'ytd-mini-guide-renderer #items',
-    chrome: 'ytd-mini-guide-renderer,ytd-masthead',
-    guideLinks: 'ytd-guide-renderer a[href],ytd-mini-guide-renderer a[href]:not(.yt-multiselect-sidebar-link)',
+    chrome: 'ytd-mini-guide-renderer,ytd-masthead,tp-yt-app-drawer#guide',
+    guideLinks: 'ytd-guide-renderer a[href]:not(.yt-multiselect-drawer-link),ytd-mini-guide-renderer a[href]:not(.yt-multiselect-sidebar-link)',
+    guideDrawer: 'tp-yt-app-drawer#guide',
+    drawerHomeItems: 'tp-yt-app-drawer#guide ytd-guide-renderer #sections > ytd-guide-section-renderer:first-of-type #items',
+    guideEntry: 'ytd-guide-entry-renderer',
     miniGuideEntry: 'ytd-mini-guide-entry-renderer',
     duration: 'ytd-thumbnail-overlay-time-status-renderer #text, ytd-thumbnail-overlay-time-status-renderer span',
     titleLink: 'a#video-title,a#video-title-link',
@@ -76,6 +79,9 @@
     if (name === 'playlists') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h14v2H3V4Zm0 5h14v2H3V9Zm0 5h8v2H3v-2Zm0 5h8v2H3v-2Zm12-6 7 4-7 4v-8Z"></path></svg>';
     if (name === 'watchLater') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm-1 3v6l5 3 1-1.7-4-2.3V7h-2Z"></path></svg>';
     if (name === 'history') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1-9.8 12h2.1A8 8 0 1 0 6.3 6.3L9 9H2V2l2.9 2.9A10 10 0 0 1 12 2Zm-1 5h2v5.4l4 2.3-1 1.7-5-2.9V7Z"></path></svg>';
+    if (name === 'subscriptions') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2h12v2H6V2Zm-2 4h16v2H4V6Zm-2 4h20v12H2V10Zm2 2v8h16v-8H4Zm6 1 5 3-5 3v-6Z"></path></svg>';
+    if (name === 'you') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm0 2a8 8 0 0 1 6.32 12.9C16.9 15.7 14.6 15 12 15s-4.9.7-6.32 1.9A8 8 0 0 1 12 4Zm0 2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Zm0 2a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm0 9c2.1 0 3.9.6 5 1.5A7.96 7.96 0 0 1 12 20a7.96 7.96 0 0 1-5-1.5c1.1-.9 2.9-1.5 5-1.5Z"></path></svg>';
+    if (name === 'quickSort') return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h12v2H3V5Zm0 6h9v2H3v-2Zm0 6h5v2H3v-2Zm15-12h2v10.2l2.6-2.6 1.4 1.4-5 5-5-5 1.4-1.4 2.6 2.6V5Z"></path></svg>';
     if (name === 'more') return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2"></circle><circle cx="12" cy="12" r="2"></circle><circle cx="12" cy="19" r="2"></circle></svg>';
     const paths = { history: 'M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z', sync: 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z', summary: "M12 2 15 9l7 3-7 3-3 7-3-7-7-3 7-3 3-7Z", mixed: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6h10v2H7v-2Z', close: 'M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4Z', all: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2 6 3 3 7-7 1.4 1.4L10 16.8 5.6 12.4 7 11Z', clear: 'M3 3h18v18H3V3Zm2 2v14h14V5H5Z', link: 'M10 7H7a5 5 0 0 0 0 10h3v-2H7a3 3 0 0 1 0-6h3V7Zm4 0v2h3a3 3 0 0 1 0 6h-3v2h3a5 5 0 0 0 0-10h-3Zm-6 4h8v2H8v-2Z', copy: 'M8 7V3h13v13h-4v5H3V7h5Zm2 0h7v7h2V5h-9v2Zm5 2H5v10h10V9Z', cut: 'M9.64 7.64a3.5 3.5 0 1 0-1.41 1.41L11.17 12l-2.94 2.95a3.5 3.5 0 1 0 1.41 1.41L12.59 13.4 18 18.81V16l-4-4 4-4V5.19l-5.41 5.41-2.95-2.96ZM6.5 8A1.5 1.5 0 1 1 6.5 5a1.5 1.5 0 0 1 0 3Zm0 11a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z', save: 'M3 5h12v2H3V5Zm0 6h12v2H3v-2Zm0 6h8v2H3v-2Zm16-4v4h4v2h-4v4h-2v-4h-4v-2h4v-4h2Z', recovery: 'M12 4a8 8 0 1 1-7.75 10H6.4A6 6 0 1 0 8 8l2 2H3V3l2.1 2.1A8 8 0 0 1 12 2v2Zm-1 3h2v5.2l3.2 1.9-1 1.7-4.2-2.5V7Z', trash: 'M8 3h8l1 2h4v2H3V5h4l1-2Zm-2 6h12l-1 12H7L6 9Zm3 2 .5 8h2L11 11H9Zm4 0-.5 8h2l.5-8h-2Z', toggle: 'M3 4h4v4H3V4Zm7 0h11v2H10V4ZM3 10h4v4H3v-4Zm7 0h11v2H10v-2ZM3 16h4v4H3v-4Zm7 0h11v2H10v-2Z' };
     return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]}"></path></svg>`;
@@ -241,19 +247,24 @@
     }
     if (!watchLaterControls) {
       watchLaterControls = element('div'); watchLaterControls.id = 'yt-watch-later-controls';
-      watchLaterControls.setAttribute('role', 'group'); watchLaterControls.setAttribute('aria-label', 'Watch Later sync');
+      watchLaterControls.setAttribute('role', 'group'); watchLaterControls.setAttribute('aria-label', 'Playlist and Watch Later tools');
       headerSyncButton = button('', quickWatchLaterSync, 'yt-watch-later-sync');
       headerSyncButton.id = 'yt-watch-later-sync';
       headerSyncButton.innerHTML = `${svg('sync')}<span>Sync</span>`;
       headerSyncButton.title = 'Sync chosen playlists to Watch Later';
       headerSyncButton.setAttribute('aria-label', 'Sync Watch Later now');
+      headerSortButton = button('', quickSort, 'yt-quick-sort');
+      headerSortButton.id = 'yt-quick-sort';
+      headerSortButton.innerHTML = `${svg('quickSort')}<span>Quick Sort</span>`;
+      headerSortButton.title = 'Sort this playlist by duration, longest first';
+      headerSortButton.setAttribute('aria-label', 'Quick Sort: longest videos first');
       headerConfigButton = button('', watchLaterDialog, 'yt-watch-later-config');
       headerConfigButton.id = 'yt-watch-later-config'; headerConfigButton.innerHTML = svg('settings');
       headerConfigButton.title = 'Configure Watch Later sync'; headerConfigButton.setAttribute('aria-label', 'Configure Watch Later sync');
       headerConfigButton.setAttribute('aria-haspopup', 'dialog'); headerConfigButton.setAttribute('aria-expanded', 'false');
       // These are independent actions, not a shared click target in YouTube's header.
-      for (const control of [headerSyncButton, headerConfigButton]) control.addEventListener('click', event => event.stopPropagation());
-      watchLaterControls.append(headerSyncButton, headerConfigButton);
+      for (const control of [headerSyncButton, headerSortButton, headerConfigButton]) control.addEventListener('click', event => event.stopPropagation());
+      watchLaterControls.append(headerSyncButton, headerSortButton, headerConfigButton);
     }
     if (watchLaterControls.nextElementSibling !== toggleButton) end.insertBefore(watchLaterControls, toggleButton);
     updateWatchLaterControls();
@@ -266,6 +277,10 @@
     watchLaterControls.setAttribute('aria-busy', String(busy));
     const label = headerSyncButton.querySelector('span'), text = busy ? 'Syncing…' : 'Sync';
     if (label.textContent !== text) label.textContent = text;
+    headerSortButton.hidden = !quickSortAvailable();
+    headerSortButton.disabled = quickSortPending || working;
+    const sortLabel = headerSortButton.querySelector('span'), sortText = quickSortPending ? 'Sorting…' : 'Quick Sort';
+    if (sortLabel.textContent !== sortText) sortLabel.textContent = sortText;
   }
   const sidebarShortcuts = [
     { key: 'history', label: 'History', href: '/feed/history' },
@@ -278,6 +293,44 @@
       return url.origin === location.origin && (shortcut.key === 'watchLater' ? url.pathname === '/playlist' && url.searchParams.get('list') === 'WL' : url.pathname === shortcut.href);
     } catch { return false; }
   }
+  const drawerShortcuts = [
+    { key: 'subscriptions', label: 'Subscriptions', href: '/feed/subscriptions' },
+    ...sidebarShortcuts,
+    { key: 'you', label: 'You', href: '/feed/you' }
+  ];
+  function createShortcutLink(shortcut, className) {
+    const link = element('a', '', className);
+    link.dataset.ytMultiselectShortcut = shortcut.key;
+    link.href = shortcut.href;
+    link.title = shortcut.label;
+    link.setAttribute('aria-label', shortcut.label);
+    link.innerHTML = svg(shortcut.key);
+    link.append(element('span', shortcut.label));
+    link.addEventListener('click', event => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const native = [...document.querySelectorAll(SELECTORS.guideLinks)].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
+      // Reuse YouTube's router when its native entry is mounted. Normal links
+      // remain the fallback, including open-in-new-tab and modified clicks.
+      if (native) { event.preventDefault(); native.click(); }
+    });
+    return link;
+  }
+  function mountDrawerShortcuts() {
+    // The overlay drawer (narrow windows) shows only Home. Native copies of these
+    // entries exist in collapsed sections, so CSS hides ours when the full guide is pinned.
+    for (const items of document.querySelectorAll(SELECTORS.drawerHomeItems)) {
+      const home = [...items.children].find(child => child.matches(SELECTORS.guideEntry) && child.querySelector('a[href="/"]'));
+      if (!home) continue;
+      let after = home;
+      for (const shortcut of drawerShortcuts) {
+        const link = items.querySelector(`.yt-multiselect-drawer-link[data-yt-multiselect-shortcut="${shortcut.key}"]`) || createShortcutLink(shortcut, 'yt-multiselect-drawer-link');
+        if (after.nextElementSibling !== link) after.after(link);
+        after = link;
+        if (matchesSidebarTarget(location.href, shortcut)) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      }
+    }
+  }
   function mountSidebarShortcuts() {
     // The expanded guide already supplies these links. Only extend the compact rail.
     for (const items of document.querySelectorAll(SELECTORS.miniGuideItems)) {
@@ -289,22 +342,7 @@
         let link = items.querySelector(`[data-yt-multiselect-shortcut="${shortcut.key}"]`);
         const native = nativeLinks.some(anchor => matchesSidebarTarget(anchor.href, shortcut));
         if (native) { link?.remove(); continue; }
-        if (!link) {
-          link = element('a', '', 'yt-multiselect-sidebar-link');
-          link.dataset.ytMultiselectShortcut = shortcut.key;
-          link.href = shortcut.href;
-          link.title = shortcut.label;
-          link.setAttribute('aria-label', shortcut.label);
-          link.innerHTML = svg(shortcut.key);
-          link.append(element('span', shortcut.label));
-          link.addEventListener('click', event => {
-            if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-            const native = [...document.querySelectorAll(SELECTORS.guideLinks)].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
-            // Reuse YouTube's router when its native entry is mounted. Normal links
-            // remain the fallback, including open-in-new-tab and modified clicks.
-            if (native) { event.preventDefault(); native.click(); }
-          });
-        }
+        if (!link) link = createShortcutLink(shortcut, 'yt-multiselect-sidebar-link');
         if (you) {
           if (link.nextElementSibling !== before) items.insertBefore(link, before);
           before = link;
@@ -319,6 +357,7 @@
     if (!host.isConnected) (document.querySelector(SELECTORS.app) || document.documentElement).append(host);
     mountToggle();
     mountSidebarShortcuts();
+    mountDrawerShortcuts();
     if (scope !== navigationScope()) { clearDrag(); scope = navigationScope(); closePanel(); showMenu(false); notice(''); selected.clear(); setSnapshot(null); lastAnchor = null; needsReload = false; if (enabled) readPlaylist(); }
     if (!enabled) {
       for (const row of document.querySelectorAll('.yt-multiselect-row')) releaseRow(row);
@@ -424,6 +463,41 @@
     if (focusedText) menuButtons().find(node => node.textContent === focusedText)?.focus();
   }
   // One click: run a Watch Later sync with the saved playlists and report the result in the status toast.
+  let headerSortButton, quickSortPending = false;
+  // Playlists found not to be sortable (not owned, incomplete read) lose the button for this page session.
+  const quickSortUnavailable = new Set();
+  function quickSortAvailable() {
+    const id = playlistId();
+    if (location.pathname !== '/playlist' || !id || quickSortUnavailable.has(id)) return false;
+    return !(snapshot?.playlistId === id && (!snapshot.complete || !snapshot.editable || !snapshot.canReorder));
+  }
+  // One click: read the whole playlist and sort it by duration, longest first.
+  async function quickSort() {
+    if (quickSortPending || working) { announce('Wait for the current step to finish.'); return; }
+    if (needsReload) { refreshNotice('Refresh YouTube to update this playlist before another change.'); return; }
+    const id = playlistId(), capturedScope = navigationScope();
+    if (!id) return;
+    quickSortPending = true; updateWatchLaterControls();
+    try {
+      const current = enabled && snapshot?.playlistId === id && snapshot.complete ? snapshot : (announce('Reading playlist…'), await send('READ', { playlistId: id, pickerVideoId: loadedRows().map(entry => entry.item).find(validVideo)?.videoId }));
+      if (navigationScope() !== capturedScope) return;
+      if (!current?.complete || !current.editable || !current.canReorder || !current.items?.length) {
+        quickSortUnavailable.add(id);
+        announce('Quick Sort isn’t available here. Only playlists you can edit can be sorted.');
+        return;
+      }
+      const keys = current.items.map(item => item.setVideoId);
+      const args = { playlistId: current.playlistId, expectedFingerprint: current.fingerprint, keys, expectedOrder: keys, sortBy: 'duration', descending: true };
+      // With selection mode on, the shared flow updates rows in place and shows progress.
+      if (enabled) { quickSortPending = false; await operation('SORT', args); return; }
+      announce(`Sorting ${keys.length} videos, longest first…`);
+      const result = await send('SORT', args);
+      if (navigationScope() !== capturedScope) return;
+      if (result.stopped) notice('Sort stopped before finishing.', 'Review', recoveryDialog, true);
+      else refreshNotice('Playlist sorted, longest first. Refresh to see the new order.');
+    } catch (error) { report(error); }
+    finally { quickSortPending = false; updateWatchLaterControls(); }
+  }
   let quickSyncPending = false;
   async function quickWatchLaterSync() {
     if (quickSyncPending) { announce('A Watch Later sync is already running.'); return; }
@@ -827,7 +901,7 @@
   // Falls back to the body until those containers exist, then re-targets.
   let observing = null;
   function observeTargets() {
-    let found = [...new Set([...document.querySelectorAll(`${SELECTORS.pageManager},${SELECTORS.masthead},${SELECTORS.miniGuide}`)])];
+    let found = [...new Set([...document.querySelectorAll(`${SELECTORS.pageManager},${SELECTORS.masthead},${SELECTORS.miniGuide},${SELECTORS.guideDrawer}`)])];
     // Without the page container (unknown layout) watch the whole body rather than miss rows.
     if (!found.some(node => node.matches(SELECTORS.pageManager))) found = [];
     if (observing && found.length === observing.length && found.every((node, index) => node === observing[index])) return;
