@@ -165,6 +165,12 @@ export function selectNewEntries(entries, lastSyncMs, addedIds) {
   return entries.filter(entry => entry.publishedMs > (lastSyncMs ?? 0) && !addedIds.has(entry.videoId));
 }
 
+// A feed only carries the ~15 most recent uploads. If every entry is new and a sync has run before,
+// older uploads have very likely fallen off the end and can never be seen.
+export function feedLooksTruncated(entries, fresh, lastSyncMs) {
+  return (lastSyncMs ?? 0) > 0 && entries.length > 0 && fresh.length === entries.length;
+}
+
 // --- Page-side functions (serialized into a youtube.com tab) ----------------
 // innertube.js must already be present in the page (globalThis.YTInnertube).
 
@@ -310,6 +316,7 @@ export function createSync(deps) {
         const fresh = selectNewEntries(entries, lastSync, addedIds);
         skipped += entries.length - fresh.length;
         await appendLog(`Found ${fresh.length} new video(s) in "${label}" (of ${entries.length} in feed).`);
+        if (feedLooksTruncated(entries, fresh, lastSync)) await appendLog(`Every video in "${label}" is new, so older uploads may have been missed (feeds only list about 15).`, 'warn');
         // Defer filtering the durable added record until the current account is known.
         for (const entry of entries) if (!candidates.has(entry.videoId)) candidates.set(entry.videoId, entry);
       } catch (err) {

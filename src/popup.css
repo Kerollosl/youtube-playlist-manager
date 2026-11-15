@@ -57,7 +57,12 @@ input[type="search"], input[type="text"] { font: inherit; font-size: 13px; min-h
 .log summary { cursor: pointer; font-size: 13px; }
 .log ol { list-style: none; margin: 6px 0 0; padding: 0; max-height: 150px; overflow-y: auto; font-size: 12px; }
 .log li { padding: 2px 0; overflow-wrap: anywhere; }
-.log li[data-level="error"] { color: var(--err); }
+.log li[data-level="error"], .log li[data-level="warn"] { color: var(--err); }
+.advanced { display: grid; gap: 8px; }
+.advanced summary { cursor: pointer; font-size: 13px; }
+.advanced[open] { gap: 10px; }
+.field { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.field input { font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
 .log li[data-level="success"] { color: var(--ok); }
 .log li[data-level="muted"] { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .fill { transition: none; } }

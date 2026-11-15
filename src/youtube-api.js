@@ -67,7 +67,7 @@ export async function youtubeCommand(command) {
   }
 
   // innertube.js is injected into the MAIN world by a manifest content script
-  // (world: MAIN) and exposes this helper object. See scripts/check-shared.sh.
+  // (world: MAIN) and exposes this helper object.
   const IT = globalThis.YTInnertube;
   if (!IT) throw new Error('YouTube helper did not load. Reload YouTube and try again.');
   const cfg = window.ytcfg;

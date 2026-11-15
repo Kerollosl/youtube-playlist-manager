@@ -65,6 +65,22 @@
           <input id="import-file" type="file" accept="application/json,.json" hidden>
           <span id="io-note" class="note grow" role="status"></span>
         </div>
+
+        <details class="advanced">
+          <summary>Advanced</summary>
+          <label class="field" for="since">Only add videos published after
+            <input id="since" type="datetime-local">
+          </label>
+          <div class="row">
+            <button id="since-save" class="btn small" type="button">Save date</button>
+            <button id="since-clear" class="btn small" type="button">Sync everything</button>
+          </div>
+          <div class="row">
+            <button id="forget" class="btn small" type="button">Forget added history</button>
+            <span id="adv-note" class="note grow" role="status"></span>
+          </div>
+          <p class="note">Forgetting clears the record of what was already added. Each sync checks Watch Later directly, so this is only needed if the two get out of step.</p>
+        </details>
       </div>
 
       <details class="log">

@@ -6,7 +6,7 @@ import { webcrypto } from 'node:crypto';
 import { youtubeCommand } from '../src/youtube-api.js';
 import {
   KEYS, extractPlaylistId, normalizeSources, exportSources, parseImport, mergeSources, buildRows, setChosen,
-  parseAtomEntries, selectNewEntries, createSync, addVideoInPage
+  parseAtomEntries, selectNewEntries, feedLooksTruncated, createSync, addVideoInPage
 } from '../src/watch-later.js';
 
 const INNERTUBE = fs.readFileSync(new URL('../src/innertube.js', import.meta.url), 'utf8');
@@ -256,4 +256,13 @@ test('log is capped at 50 entries', async () => {
   for (let i = 0; i < 60; i++) await h.sync.appendLog(`line ${i}`);
   assert.equal(h.data[KEYS.log].length, 50);
   assert.equal(h.data[KEYS.log].at(-1).text, 'line 59');
+});
+
+test('feedLooksTruncated flags a fully new feed only after a prior sync', () => {
+  const entries = [{ videoId: 'a', publishedMs: 5 }, { videoId: 'b', publishedMs: 6 }];
+  assert.equal(feedLooksTruncated(entries, entries, 1), true);
+  assert.equal(feedLooksTruncated(entries, entries, 0), false);
+  assert.equal(feedLooksTruncated(entries, entries, null), false);
+  assert.equal(feedLooksTruncated(entries, entries.slice(1), 1), false);
+  assert.equal(feedLooksTruncated([], [], 1), false);
 });

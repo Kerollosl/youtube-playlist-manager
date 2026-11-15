@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Multiselect Tools for Playlists",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Multiselect, batch save, move and sort for YouTube playlists, plus sync new uploads from chosen playlists to Watch Later.",
   "author": "Kerollos Lowandy",
   "minimum_chrome_version": "111",

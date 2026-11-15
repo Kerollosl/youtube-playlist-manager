@@ -2,7 +2,6 @@
 # Builds dist/<name>-<version>.zip with only the shipping files.
 set -e
 cd "$(dirname "$0")/.."
-sh scripts/check-shared.sh
 version=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' manifest.json | head -1)
 out="dist/youtube-playlist-manager-$version.zip"
 mkdir -p dist

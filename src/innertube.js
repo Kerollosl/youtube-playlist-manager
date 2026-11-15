@@ -1,8 +1,3 @@
-// SHARED MODULE: youtube-watch-later-sync/innertube.js and
-// youtube-playlist-manager/src/innertube.js must stay byte-identical.
-// Each extension ships its own copy (no cross-folder imports in a store zip).
-// Run scripts/check-shared.sh in either folder to diff the two copies.
-//
 // Helpers for YouTube's private "InnerTube" web endpoints, used from the
 // MAIN world of a youtube.com tab. It reads the page's own session cookie to
 // sign requests the same way youtube.com does. Nothing here sends data

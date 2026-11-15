@@ -89,6 +89,7 @@ function render() {
   empty.hidden = rows.length > 0;
   if (!rows.length) empty.textContent = library.length || sources.length ? 'No playlists match the filter.' : 'No playlists yet. Press Load my playlists (needs a signed-in YouTube) or add one by URL.';
   $('sync').disabled = running || requesting || sources.length === 0;
+  for (const id of ['since-save', 'since-clear', 'forget']) $(id).disabled = running;
   $('sync').textContent = running || requesting ? 'Syncing…' : 'Sync now';
   $('source-count').textContent = sources.length ? `${sources.length} playlist${sources.length === 1 ? '' : 's'} selected` : 'Choose playlists to start syncing.';
 }
@@ -196,7 +197,7 @@ chrome.runtime.onMessage.addListener(message => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes[KEYS.log]) renderLog(changes[KEYS.log].newValue || []);
-  if (changes[KEYS.lastSync]) $('last').textContent = relTime(changes[KEYS.lastSync].newValue);
+  if (changes[KEYS.lastSync]) { $('last').textContent = relTime(changes[KEYS.lastSync].newValue); $('since').value = toLocalInput(changes[KEYS.lastSync].newValue); }
   if (changes[KEYS.sources]) { sources = normalizeSources(changes[KEYS.sources].newValue); render(); }
   if (changes[KEYS.inProgress]) {
     running = Boolean(changes[KEYS.inProgress].newValue);
@@ -230,6 +231,38 @@ $('import-file').addEventListener('change', async event => {
   $('io-note').textContent = `Imported ${sources.length - before} new, ${result.skipped} skipped.`;
 });
 
+// --- Advanced: sync window and added history ---------------------------------------------
+
+const toLocalInput = ms => {
+  if (!ms) return '';
+  const date = new Date(ms);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+};
+async function setLastSync(ms, note) {
+  await chrome.storage.local.set({ [KEYS.lastSync]: ms });
+  $('since').value = toLocalInput(ms);
+  $('adv-note').textContent = note;
+}
+$('since-save').addEventListener('click', async () => {
+  const ms = new Date($('since').value).getTime();
+  if (!$('since').value || Number.isNaN(ms)) { $('adv-note').textContent = 'Pick a date first.'; return; }
+  await setLastSync(ms, 'Saved. The next sync adds videos published after this date.');
+});
+$('since-clear').addEventListener('click', () => setLastSync(null, 'The next sync considers every video in each feed.'));
+// Two clicks: the first arms the button for 5 seconds, the second clears the added record.
+let forgetArmed = 0;
+$('forget').addEventListener('click', async () => {
+  if (!forgetArmed) {
+    $('forget').textContent = 'Click again to confirm';
+    forgetArmed = setTimeout(() => { forgetArmed = 0; $('forget').textContent = 'Forget added history'; }, 5000);
+    return;
+  }
+  clearTimeout(forgetArmed); forgetArmed = 0;
+  $('forget').textContent = 'Forget added history';
+  await chrome.storage.local.set({ [KEYS.added]: [] });
+  $('adv-note').textContent = 'Added history cleared.';
+});
+
 // --- Load ---------------------------------------------------------------------------------
 
 (async function init() {
@@ -247,6 +280,7 @@ $('import-file').addEventListener('change', async event => {
   if (running) $('progress-text').textContent = 'Syncing… Check Activity for progress.';
   if (library.length) $('load-note').textContent = `${library.length} playlists (from ${new Date(store[KEYS.library].fetchedAt).toLocaleDateString()}).`;
   $('last').textContent = relTime(store[KEYS.lastSync]);
+  $('since').value = toLocalInput(store[KEYS.lastSync]);
   renderLog(store[KEYS.log] || []);
   if (!embedded && !(await activeYouTubeTab())) $('toggle-note').textContent = 'Open a YouTube tab to use multiselect.';
   render();
