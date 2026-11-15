@@ -423,7 +423,7 @@
     catch (error) { if (enabled && navigationScope() === capturedScope && revision === noticeRevision && !working) report(error); }
     finally { readPending = false; if (enabled && scope !== capturedScope && playlistId()) readPlaylist(); }
   }
-  function toggle(value) { enabled = value; bar.hidden = !value; if (!value) { selected.clear(); lastAnchor = null; clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
+  function toggle(value) { enabled = value; bar.hidden = !value; observeTargets(); if (!value) { selected.clear(); lastAnchor = null; clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
   function selectAll() { const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); for (const item of items) selected.set(item.key, item); syncRows(); }
   function deselect() { selected.clear(); lastAnchor = null; syncRows(); }
   function menuButtons() { return [...menu.querySelectorAll('button:not(:disabled)')].filter(node => node.getClientRects().length); }
@@ -904,6 +904,9 @@
     let found = [...new Set([...document.querySelectorAll(`${SELECTORS.pageManager},${SELECTORS.masthead},${SELECTORS.miniGuide},${SELECTORS.guideDrawer}`)])];
     // Without the page container (unknown layout) watch the whole body rather than miss rows.
     if (!found.some(node => node.matches(SELECTORS.pageManager))) found = [];
+    // While multiselect is off only the header/guide rails matter (toggle and shortcuts), so skip
+    // the busy page area. Keep it if no rail exists yet; yt-navigate-finish re-targets later.
+    else if (!enabled) { const rails = found.filter(node => !node.matches(SELECTORS.pageManager)); if (rails.length) found = rails; }
     if (observing && found.length === observing.length && found.every((node, index) => node === observing[index])) return;
     pageObserver.disconnect();
     observing = found;
