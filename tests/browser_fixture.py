@@ -340,6 +340,7 @@ class BrowserFixture(unittest.TestCase):
                     <main><ytd-playlist-video-renderer><a id="video-title" href="/watch?v=abcdefghijk&list=WL&index=1">Video</a></ytd-playlist-video-renderer></main></body></html>"""
                 page.route('https://www.youtube.com/**', lambda route: route.fulfill(body=html, content_type='text/html'))
                 page.goto('https://www.youtube.com/playlist?list=WL')
+                open_pages = len(context.pages)  # persistent contexts also start with about:blank
                 page.locator('#yt-multiselect-toggle').click()
                 page.wait_for_function('document.querySelector("#yt-multiselect-tools").shadowRoot.adoptedStyleSheets.length > 0')
                 self.assertEqual(page.locator('.bar').bounding_box()['height'], 56)
@@ -360,10 +361,12 @@ class BrowserFixture(unittest.TestCase):
                 self.assertTrue(popup.get_by_label('Add a playlist by URL or ID').is_visible())
                 popup.get_by_role('button', name='Load my playlists', exact=True).click()
                 expect(popup.locator('#load-note')).to_contain_text('signed in')
-                popup.get_by_label('Add a playlist by URL or ID').press('Escape')
+                # Escape removes the iframe on keydown; send it from the page so keyup is not routed to a detached frame.
+                popup.get_by_label('Add a playlist by URL or ID').focus()
+                page.keyboard.press('Escape')
                 expect(page.get_by_role('dialog')).to_be_hidden()
                 self.assertEqual(page.evaluate('document.activeElement.id'), 'yt-watch-later-config')
-                self.assertEqual(len(context.pages), 1)
+                self.assertEqual(len(context.pages), open_pages)
             finally: context.close()
     def test_real_extension_popup_renders_adds_source_and_toggle_hint(self):
         root = str(Path(__file__).resolve().parents[1])
