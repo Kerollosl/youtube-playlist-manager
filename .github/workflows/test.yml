@@ -17,7 +17,12 @@ jobs:
         with:
           python-version: '3.11'
       - name: Synthetic Chromium integration
+        timeout-minutes: 10
+        env:
+          PYTHONUNBUFFERED: '1'
+          PYTHONFAULTHANDLER: '1'
         run: |
           python -m pip install playwright==1.62.0
           python -m playwright install --with-deps chromium
-          python tests/browser_fixture.py
+          # A hung test is killed with SIGABRT so faulthandler prints where it was stuck.
+          timeout -s ABRT 8m python tests/browser_fixture.py -v
