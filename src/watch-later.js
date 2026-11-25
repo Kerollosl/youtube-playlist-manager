@@ -250,31 +250,69 @@ export function readWatchLaterInPage() {
 // closeTab(tabId), readWatchLater(tabId), addVideo(tabId, videoId), now(),
 // pause() (rate-limit gap between adds), emit(message) (live popup updates).
 
+const FEED_CONCURRENCY = 4;
+
+// Promise.allSettled over items, with at most `limit` calls of fn in flight.
+export async function mapSettled(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try { results[i] = { status: 'fulfilled', value: await fn(items[i], i) }; }
+      catch (reason) { results[i] = { status: 'rejected', reason }; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 export function createSync(deps) {
   const { storage } = deps;
   let running = false;
   const emit = message => { try { deps.emit?.(message); } catch { /* no popup listening */ } };
 
-  async function appendLog(text, level = 'info') {
+  // During a sync, log lines are buffered and written in one storage get+set at checkpoints
+  // (state changes, each recorded add, and the end of the run) instead of once per line.
+  let pendingLog = null;
+
+  async function persistLog(entries) {
     const { [KEYS.log]: log = [] } = await storage.get(KEYS.log);
+    await storage.set({ [KEYS.log]: [...log, ...entries].slice(-MAX_LOG_ENTRIES) });
+  }
+
+  async function flushLog() {
+    if (!pendingLog?.length) return;
+    const batch = pendingLog;
+    pendingLog = [];
+    await persistLog(batch);
+  }
+
+  async function appendLog(text, level = 'info') {
     const entry = { ts: deps.now(), text, level };
-    await storage.set({ [KEYS.log]: [...log, entry].slice(-MAX_LOG_ENTRIES) });
+    if (pendingLog) pendingLog.push(entry);
+    else await persistLog([entry]);
     emit({ type: 'WL_PROGRESS', entry });
     return entry;
   }
 
   async function setState(inProgress, lastSyncTimestamp) {
+    await flushLog();
     const update = { [KEYS.inProgress]: inProgress };
     if (lastSyncTimestamp !== undefined) update[KEYS.lastSync] = lastSyncTimestamp;
     await storage.set(update);
     emit({ type: 'WL_STATE', inProgress, lastSyncTimestamp });
   }
 
-  const saveAdded = async addedIds => storage.set({ [KEYS.added]: Array.from(addedIds).slice(-MAX_ADDED_IDS) });
+  const saveAdded = async addedIds => {
+    await flushLog();
+    await storage.set({ [KEYS.added]: Array.from(addedIds).slice(-MAX_ADDED_IDS) });
+  };
 
   async function runSync() {
     if (running) return { started: false };
     running = true;
+    pendingLog = [];
     try {
       if ((await storage.get(KEYS.inProgress))[KEYS.inProgress]) {
         await appendLog('Sync already in progress, ignoring duplicate request.', 'muted');
@@ -290,7 +328,11 @@ export function createSync(deps) {
         await setState(false);
         return { started: true, error: err.message };
       }
-    } finally { running = false; }
+    } finally {
+      try { await flushLog(); } catch { /* logging must not mask the sync result */ }
+      pendingLog = null;
+      running = false;
+    }
   }
 
   async function syncOnce(startedAt) {
@@ -308,11 +350,15 @@ export function createSync(deps) {
     // Phase 1: fetch + parse every selected playlist's feed.
     const candidates = new Map();
     let skipped = 0, feedErrors = 0;
-    for (const source of sources) {
+    // Feeds are fetched FEED_CONCURRENCY at a time; results are logged in source order.
+    await appendLog(`Checking ${sources.length} playlist feed(s)...`);
+    const results = await mapSettled(sources, FEED_CONCURRENCY, source => deps.fetchEntries(source.id));
+    for (let s = 0; s < sources.length; s++) {
+      const source = sources[s];
       const label = source.label || source.id;
-      await appendLog(`Checking playlist "${label}"...`);
       try {
-        const entries = await deps.fetchEntries(source.id);
+        if (results[s].status === 'rejected') throw results[s].reason;
+        const entries = results[s].value;
         const fresh = selectNewEntries(entries, lastSync, addedIds);
         skipped += entries.length - fresh.length;
         await appendLog(`Found ${fresh.length} new video(s) in "${label}" (of ${entries.length} in feed).`);
