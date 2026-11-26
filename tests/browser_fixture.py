@@ -361,9 +361,12 @@ class BrowserFixture(unittest.TestCase):
                 self.assertTrue(popup.get_by_label('Add a playlist by URL or ID').is_visible())
                 popup.get_by_role('button', name='Load my playlists', exact=True).click()
                 expect(popup.locator('#load-note')).to_contain_text('signed in')
-                # Escape removes the iframe on keydown; send it from the page so keyup is not routed to a detached frame.
-                popup.get_by_label('Add a playlist by URL or ID').focus()
-                page.keyboard.press('Escape')
+                # Escape removes this iframe on keydown. A real key press then sends keyup to the
+                # removed frame and, on Linux CI, never returns (Keyboard.press has no timeout).
+                # Dispatch only the keydown the panel listens for; this call is bounded.
+                field = popup.get_by_label('Add a playlist by URL or ID')
+                field.focus()
+                field.dispatch_event('keydown', {'key': 'Escape'})
                 expect(page.get_by_role('dialog')).to_be_hidden()
                 self.assertEqual(page.evaluate('document.activeElement.id'), 'yt-watch-later-config')
                 self.assertEqual(len(context.pages), open_pages)

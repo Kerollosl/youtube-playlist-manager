@@ -3,19 +3,20 @@
 // reads/writes chrome.storage.local and sends WL_* messages.
 import { KEYS, buildRows, setChosen, normalizeSources, extractPlaylistId, exportSources, parseImport, mergeSources } from './watch-later.js';
 
-const $ = id => document.getElementById(id);
+/** @param {string} id @returns {HTMLInputElement} Every id used here exists in popup.html. */
+const $ = id => /** @type {HTMLInputElement} */ (document.getElementById(id));
 let sources = [];
 let library = [];
 let running = false;
 let requesting = false;
 const params = new URLSearchParams(location.search);
 const embedded = params.has('embed');
-if (['light', 'dark'].includes(params.get('theme'))) document.documentElement.dataset.theme = params.get('theme');
+if (['light', 'dark'].includes(/** @type {string} */ (params.get('theme')))) document.documentElement.dataset.theme = /** @type {string} */ (params.get('theme'));
 
 // Embedded mode (shown as a mini window inside YouTube from the in-page menu): the page's own header
 // carries the title, and the multiselect toggle is pointless because multiselect is already open.
 if (embedded) {
-  $('sel-h').closest('section').hidden = true;
+  /** @type {HTMLElement} */ ($('sel-h').closest('section')).hidden = true;
   document.documentElement.classList.add('embed');
 }
 
@@ -56,7 +57,7 @@ async function activeYouTubeTab() {
 $('toggle').addEventListener('click', async () => {
   const tab = await activeYouTubeTab();
   if (!tab) { $('toggle-note').textContent = 'Open a YouTube tab first, then press this again.'; return; }
-  try { await chrome.tabs.sendMessage(tab.id, { type: 'TOGGLE' }); window.close(); }
+  try { await chrome.tabs.sendMessage(/** @type {number} */ (tab.id), { type: 'TOGGLE' }); window.close(); }
   catch { $('toggle-note').textContent = 'Reload the YouTube tab, then try again.'; }
 });
 
@@ -114,7 +115,7 @@ $('load').addEventListener('click', async () => {
     library = result.playlists;
     $('load-note').textContent = [`${library.length} playlists loaded.`, ...result.warnings].join(' ');
     render();
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     $('load-note').textContent = error.message;
   } finally { button.disabled = false; }
 });
@@ -124,7 +125,7 @@ $('add').addEventListener('submit', async event => {
   const error = $('add-error');
   error.hidden = true;
   const parsed = extractPlaylistId($('add-input').value);
-  if (!parsed.ok) { error.textContent = parsed.error; error.hidden = false; return; }
+  if (!parsed.ok) { error.textContent = /** @type {string} */ (parsed.error); error.hidden = false; return; }
   if (sources.some(source => source.id === parsed.id)) { error.textContent = 'Already in the list.'; error.hidden = false; return; }
   $('add-input').value = '';
   await commit([...sources, { id: parsed.id, label: '', addedAt: Date.now() }]);
@@ -176,10 +177,10 @@ $('sync').addEventListener('click', async () => {
     } else {
       $('sync-result').textContent = result.added ? `Added ${result.added} new video${result.added === 1 ? '' : 's'}.` : 'Watch Later is up to date.';
     }
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     $('sync-result').textContent = error.message;
     $('sync-result').classList.add('err');
-    $('log-list').closest('details').open = true;
+    /** @type {HTMLDetailsElement} */ ($('log-list').closest('details')).open = true;
   } finally {
     requesting = false;
     $('progress').hidden = !running;
@@ -221,11 +222,12 @@ $('export').addEventListener('click', () => {
 
 $('import').addEventListener('click', () => $('import-file').click());
 $('import-file').addEventListener('change', async event => {
-  const file = event.target.files[0];
-  event.target.value = '';
+  const input = /** @type {HTMLInputElement} */ (event.target);
+  const file = /** @type {FileList} */ (input.files)[0];
+  input.value = '';
   if (!file) return;
   const result = parseImport(await file.text());
-  if (!result.ok) { $('io-note').textContent = result.error; return; }
+  if (!result.ok) { $('io-note').textContent = /** @type {string} */ (result.error); return; }
   const before = sources.length;
   await commit(mergeSources(sources, result.sources));
   $('io-note').textContent = `Imported ${sources.length - before} new, ${result.skipped} skipped.`;
@@ -270,8 +272,8 @@ $('forget').addEventListener('click', async () => {
   try {
     const status = await chrome.runtime.sendMessage({ type: 'WL_STATUS' });
     if (!status?.ok) throw new Error(status?.error || 'Extension unavailable. Reload YouTube and try again.');
-  } catch (error) { $('sync-result').textContent = error.message; $('sync-result').classList.add('err'); }
-  const store = await chrome.storage.local.get([KEYS.sources, KEYS.library, KEYS.lastSync, KEYS.log, KEYS.inProgress]);
+  } catch (/** @type {any} */ error) { $('sync-result').textContent = error.message; $('sync-result').classList.add('err'); }
+  const store = /** @type {Record<string, any>} */ (await chrome.storage.local.get([KEYS.sources, KEYS.library, KEYS.lastSync, KEYS.log, KEYS.inProgress]));
   sources = normalizeSources(store[KEYS.sources]);
   library = store[KEYS.library]?.playlists || [];
   running = Boolean(store[KEYS.inProgress]);

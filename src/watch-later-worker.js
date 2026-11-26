@@ -19,7 +19,7 @@ async function ensureYouTubeTab() {
   const [existing] = await chrome.tabs.query({ url: 'https://www.youtube.com/*', status: 'complete' });
   if (existing) { await injectInnertube(existing.id); return { tabId: existing.id, created: false }; }
   const tab = await chrome.tabs.create({ url: 'https://www.youtube.com', active: false });
-  await new Promise(resolve => {
+  await new Promise(/** @param {(value?: unknown) => void} resolve */ resolve => {
     const onUpdated = (tabId, info) => {
       if (tabId === tab.id && info.status === 'complete') { chrome.tabs.onUpdated.removeListener(onUpdated); resolve(); }
     };
@@ -83,7 +83,7 @@ export async function loadLibrary() {
     await chrome.storage.local.set({ [KEYS.library]: { fetchedAt, playlists } });
     return { playlists, warnings, fetchedAt };
   } finally {
-    if (created) await chrome.tabs.remove(tabId).catch(() => {});
+    if (created) await chrome.tabs.remove(/** @type {number} */ (tabId)).catch(() => {});
   }
 }
 

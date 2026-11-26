@@ -51,7 +51,7 @@ function cleanSource(entry) {
   const raw = typeof entry === 'string' ? { id: entry } : entry;
   if (!raw || typeof raw !== 'object') return null;
   const parsed = extractPlaylistId(raw.id ?? raw.url ?? '');
-  if (!parsed.ok || RESERVED.has(parsed.id)) return null;
+  if (!parsed.ok || RESERVED.has(/** @type {string} */ (parsed.id))) return null;
   const label = typeof raw.label === 'string' ? raw.label.trim().slice(0, 150) : '';
   const addedAt = Number.isFinite(raw.addedAt) ? raw.addedAt : 0;
   return { id: parsed.id, label, addedAt };
@@ -195,13 +195,13 @@ export function addVideoInPage(videoId, expectedFingerprint) {
         body: JSON.stringify({ context, actions: [{ action: 'ACTION_ADD_VIDEO', addedVideoId: videoId }], playlistId: 'WL' })
       });
       // A 200 is NOT proof of success: innertube answers 200 with an error payload.
-      let data = null;
+      let data = /** @type {any} */ (null);
       try { data = await response.json(); } catch { /* non-JSON body: fall back to HTTP status */ }
       if (!response.ok) return { ok: false, status: response.status, error: data?.error?.message || `HTTP ${response.status}` };
       if (data?.error) return { ok: false, status: data.error.code || response.status, error: data.error.message || 'API returned an error' };
       if (data?.status && data.status !== 'STATUS_SUCCEEDED') return { ok: false, status: response.status, error: `API status ${data.status}` };
       return { ok: true, status: response.status };
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       return { ok: false, status: 0, error: err.message };
     }
   })();
@@ -239,7 +239,7 @@ export function readWatchLaterInPage() {
       const ids = new Set();
       collectVideoIds(data, ids, 0);
       return { ok: true, ids: Array.from(ids), fingerprint };
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       return { ok: false, ids: [], error: err.message };
     }
   })();
@@ -274,7 +274,7 @@ export function createSync(deps) {
 
   // During a sync, log lines are buffered and written in one storage get+set at checkpoints
   // (state changes, each recorded add, and the end of the run) instead of once per line.
-  let pendingLog = null;
+  let pendingLog = /** @type {any[] | null} */ (null);
 
   async function persistLog(entries) {
     const { [KEYS.log]: log = [] } = await storage.get(KEYS.log);
@@ -323,7 +323,7 @@ export function createSync(deps) {
       await appendLog('Sync started...');
       try {
         return await syncOnce(startedAt);
-      } catch (err) {
+      } catch (/** @type {any} */ err) {
         await appendLog(`Sync failed: ${err.message}`, 'error');
         await setState(false);
         return { started: true, error: err.message };
@@ -365,7 +365,7 @@ export function createSync(deps) {
         if (feedLooksTruncated(entries, fresh, lastSync)) await appendLog(`Every video in "${label}" is new, so older uploads may have been missed (feeds only list about 15).`, 'warn');
         // Defer filtering the durable added record until the current account is known.
         for (const entry of entries) if (!candidates.has(entry.videoId)) candidates.set(entry.videoId, entry);
-      } catch (err) {
+      } catch (/** @type {any} */ err) {
         feedErrors++;
         await appendLog(`Failed to fetch/parse playlist "${label}": ${err.message}`, 'error');
       }
@@ -381,7 +381,7 @@ export function createSync(deps) {
     }
 
     // Phase 2: adds run inside a YouTube tab; acquire one only when there is work.
-    let added = 0, errors = feedErrors, aborted = false, verified = null, verificationFailed = false;
+    let added = 0, errors = feedErrors, aborted = false, verified = /** @type {{ landed: number, attempted: number } | null} */ (null), verificationFailed = false;
     const attempted = [];
     const { tabId, created } = await deps.ensureTab();
     try {
@@ -437,7 +437,7 @@ export function createSync(deps) {
             await appendLog(`Could not add "${video.title}" (${result.error || 'HTTP ' + result.status}). Skipping.`, 'error');
             errors++;
           }
-        } catch (err) {
+        } catch (/** @type {any} */ err) {
           await appendLog(`Network error adding "${video.title}": ${err.message}. Skipping.`, 'error');
           errors++;
         }

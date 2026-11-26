@@ -267,7 +267,7 @@ export async function youtubeCommand(command) {
   const sections = selectedBody?.sectionListRenderer?.contents;
   const bodyRows = Array.isArray(sections) ? sections.flatMap(section =>
     Array.isArray(section.itemSectionRenderer?.contents) ? section.itemSectionRenderer.contents : [section]) : [];
-  let canonicalId = null;
+  let canonicalId = /** @type {string | null} */ (null);
   const canonical = data.microformat?.microformatDataRenderer?.urlCanonical;
   if (typeof canonical === 'string') {
     try {
@@ -282,7 +282,7 @@ export async function youtubeCommand(command) {
     throw new Error('YouTube returned a different playlist. Refresh the page.');
   }
   const warnings = [];
-  const result = { ok: true, playlistId: command.playlistId, fingerprint, items: [],
+  const result = { ok: true, playlistId: command.playlistId, fingerprint, items: /** @type {any[]} */ ([]),
     title: data.metadata?.playlistMetadataRenderer?.title || text(header?.title) || command.playlistId,
     complete: false, editable: false, canReorder: false, warnings,
     diagnostics: {
@@ -333,7 +333,7 @@ export async function youtubeCommand(command) {
       warnings.push('YouTube playlist structure is unrecognized. No complete snapshot is available.');
       return result;
     }
-    let pickerOptions = null;
+    let pickerOptions = /** @type {any[] | null} */ (null);
     async function emptyPickerOptions() {
       if (pickerOptions !== null) return pickerOptions;
       const picker = await request('playlist/get_add_to_playlist', {
@@ -344,7 +344,7 @@ export async function youtubeCommand(command) {
       pickerOptions = menus.length === 1 && Array.isArray(menus[0]?.playlists)
         ? menus[0].playlists.map(row => row.playlistAddToOptionRenderer)
           .filter(option => option && id(option.playlistId)) : [];
-      return pickerOptions;
+      return /** @type {any[]} */ (pickerOptions);
     }
     if (!identityIds.length) {
       // Some authenticated empty playlist responses omit IDs even in the
@@ -406,7 +406,7 @@ export async function youtubeCommand(command) {
   const seenTokens = new Set();
   let recognized = true;
   function parseRows(rows) {
-    let continuation = null;
+    let continuation = /** @type {string | null} */ (null);
     for (const row of rows) {
       const video = row?.playlistVideoRenderer;
       if (video) {
@@ -455,7 +455,7 @@ export async function youtubeCommand(command) {
     }
     seenTokens.add(token);
     let next;
-    try { next = await request('browse', { continuation: token }); } catch (error) {
+    try { next = await request('browse', { continuation: token }); } catch (/** @type {any} */ error) {
       warnings.push(error.message);
       recognized = false;
       break;

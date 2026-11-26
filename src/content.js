@@ -60,17 +60,19 @@
   })();
   function syncTheme() {
     host.dataset.theme = document.documentElement.hasAttribute('dark') ? 'dark' : 'light';
-    const frame = root.querySelector('.wl-frame');
+    const frame = /** @type {HTMLIFrameElement | null} */ (root.querySelector('.wl-frame'));
     frame?.contentWindow?.postMessage({ type: 'WL_THEME', theme: host.dataset.theme }, panelOrigin());
   }
   function panelOrigin() { const url = new URL(chrome.runtime.getURL(''), location.href); return `${url.protocol}//${url.host}`; }
   syncTheme();
   new MutationObserver(syncTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['dark'] });
-  const bar = root.querySelector('.bar'), menu = root.querySelector('.menu'), backdrop = root.querySelector('.backdrop'), panel = root.querySelector('.panel');
+  const bar = /** @type {HTMLElement} */ (root.querySelector('.bar')), menu = /** @type {HTMLElement} */ (root.querySelector('.menu')), backdrop = /** @type {HTMLElement} */ (root.querySelector('.backdrop')), panel = /** @type {HTMLElement} */ (root.querySelector('.panel'));
+  /** @type {any} */
   let noRowsTimer = null; const noRowsNotified = new Set();
   const selected = new Map(), rowBoxes = new WeakMap(), wiredRows = new WeakSet(), dragAttributes = new WeakMap();
-  let groupDrag = null, dropRow = null, scrollFrame = null, scrollSpeed = 0;
-  let enabled = false, scope = navigationScope(), snapshot = null, toggleButton, timer, toastTimer, lastAnchor = null, working = false, readPending = false, needsReload = false, dialogFocus, noticeRevision = 0, introduced = false;
+  let groupDrag = /** @type {any} */ (null), dropRow = /** @type {Element | null} */ (null), scrollFrame = /** @type {number | null} */ (null), scrollSpeed = 0;
+  let enabled = false, scope = navigationScope(), snapshot = /** @type {any} */ (null), toggleButton, timer, toastTimer, lastAnchor = null, working = false, readPending = false, needsReload = false, dialogFocus, noticeRevision = 0, introduced = false;
+  /** @type {{ activeJob: any, queue: any, history: any[], busy: boolean, historyCount?: number }} */
   let operationStatus = { activeJob: null, queue: null, history: [], busy: false };
   let watchLaterControls, headerSyncButton, headerConfigButton, watchLaterBusy = false;
 
@@ -103,7 +105,7 @@
   function links(items = [...selected.values()]) { return items.filter(validVideo).map(item => `https://www.youtube.com/watch?v=${item.videoId}`).join('\n'); }
   function notice(text, actionText, action, persistent = false, tone = 'status') {
     noticeRevision++;
-    const toast = root.querySelector('.toast'); toast.replaceChildren(element('span', text, 'toast-message'));
+    const toast = /** @type {HTMLElement} */ (root.querySelector('.toast')); toast.replaceChildren(element('span', text, 'toast-message'));
     if (actionText) toast.append(button(actionText, action));
     if (text) { const close = button('', () => notice(''), 'icon'); close.innerHTML = svg('close'); close.setAttribute('aria-label', 'Dismiss notice'); toast.append(close); }
     toast.hidden = !text; toast.dataset.tone = tone; toast.setAttribute('role', tone === 'error' ? 'alert' : 'status'); clearTimeout(toastTimer);
@@ -118,7 +120,7 @@
     if (typeof chrome === 'undefined' || typeof chrome.runtime?.sendMessage !== 'function') throw disconnected();
     let result;
     try { result = await chrome.runtime.sendMessage({ type, ...values }); }
-    catch (error) { if (/extension context invalidated/i.test(error.message || '')) throw disconnected(); throw error; }
+    catch (/** @type {any} */ error) { if (/extension context invalidated/i.test(error.message || '')) throw disconnected(); throw error; }
     if (!result?.ok) throw Object.assign(new Error(result?.error || 'Could not reach playlist tools. Reload YouTube and try again.'), { jobId: result?.jobId });
     return result;
   }
@@ -139,7 +141,7 @@
     if (!/^[A-Za-z0-9_-]{11}$/.test(videoId || '')) return null;
     const indexText = url.searchParams.get('index') || row.querySelector(SELECTORS.index)?.textContent.trim();
     const index = /^[0-9]+$/.test(indexText || '') ? Number(indexText) - 1 : null;
-    let exact = null;
+    let exact = /** @type {any} */ (null);
     if (snapshot?.complete && snapshot.playlistId === playlistId()) {
       if (index !== null) { const atIndex = byIndex.get(index); if (atIndex?.videoId === videoId) exact = atIndex; }
       else { exact = byVideo.get(videoId); }
@@ -182,42 +184,42 @@
     // Hidden selection UI needs no video enumeration or toolbar rendering.
     if (!enabled) return;
     const count = snapshot?.complete && snapshot.playlistId === playlistId() ? snapshot.items.length : (entries || loadedRows()).length;
-    const label = root.querySelector('.count');
+    const label = /** @type {HTMLElement} */ (root.querySelector('.count'));
     const queued = operationStatus.queue?.items?.length || 0, active = operationStatus.activeJob;
     if (!selected.size && active) label.replaceChildren(document.createTextNode(active.phase === 'ready_to_remove' ? 'Move ready' : 'Operation saved'));
     else if (!selected.size && queued) label.replaceChildren(document.createTextNode(`${queued}`), element('small', ` ready to ${operationStatus.queue.kind === 'move' ? 'move' : 'copy'}`));
     else label.replaceChildren(document.createTextNode(`${selected.size}`), element('small', ` / ${count}`), document.createTextNode(' selected'));
     label.title = active ? 'A saved operation needs attention' : queued && !selected.size ? `${queued} videos ready to ${operationStatus.queue.kind}` : `${selected.size} of ${count} ${snapshot?.complete ? 'playlist' : 'loaded'} videos selected`;
-    const duration = root.querySelector('.duration'), durations = [...selected.values()].map(item => item.durationSeconds);
+    const duration = /** @type {HTMLElement} */ (root.querySelector('.duration')), durations = [...selected.values()].map(item => item.durationSeconds);
     const known = durations.filter(value => Number.isFinite(value) && value >= 0);
     const missing = durations.length - known.length;
     duration.hidden = !selected.size;
     duration.textContent = known.length ? `${formatDuration(known.reduce((sum, value) => sum + value, 0))}${missing ? ' + unknown' : ''}` : 'Duration unknown';
     duration.title = missing ? `${missing} selected ${missing === 1 ? 'video has' : 'videos have'} no available duration` : 'Total duration of selected videos';
     bar.setAttribute('aria-busy', String(working || operationStatus.busy));
-    root.querySelector('[data-action="menu"]').classList.toggle('has-status', Boolean(active || queued));
-    root.querySelector('[data-action="links"]').disabled = !selected.size || working;
-    root.querySelector('[data-action="all"]').disabled = working || !count;
-    const all = root.querySelector('[data-action="all"]');
+    /** @type {HTMLElement} */ (root.querySelector('[data-action="menu"]')).classList.toggle('has-status', Boolean(active || queued));
+    /** @type {HTMLButtonElement} */ (root.querySelector('[data-action="links"]')).disabled = !selected.size || working;
+    /** @type {HTMLButtonElement} */ (root.querySelector('[data-action="all"]')).disabled = working || !count;
+    const all = /** @type {HTMLElement} */ (root.querySelector('[data-action="all"]'));
     const checked = selected.size > 0 && selected.size === count;
     all.setAttribute('aria-checked', checked ? 'true' : selected.size ? 'mixed' : 'false');
-    all.setAttribute('aria-label', checked ? 'Deselect all' : 'Select all'); all.title = all.getAttribute('aria-label');
+    all.setAttribute('aria-label', checked ? 'Deselect all' : 'Select all'); all.title = /** @type {string} */ (all.getAttribute('aria-label'));
     all.innerHTML = svg(checked ? 'all' : selected.size ? 'mixed' : 'clear');
-    root.querySelector('[data-action="save"]').disabled = working || (!selected.size && !queued && !active);
-    const progress = root.querySelector('.progress'); progress.hidden = !(working || operationStatus.busy);
+    /** @type {HTMLButtonElement} */ (root.querySelector('[data-action="save"]')).disabled = working || (!selected.size && !queued && !active);
+    const progress = /** @type {HTMLElement} */ (root.querySelector('.progress')); progress.hidden = !(working || operationStatus.busy);
     const removing = active?.phase === 'removing', reordering = ['sorting', 'reordering'].includes(active?.phase);
     const done = removing ? active.removed?.length || 0 : reordering ? active.reordered?.length || 0 : active?.copied?.length || 0;
     const total = reordering ? active.plannedMoves : active?.itemCount ?? active?.items?.length;
     progress.dataset.indeterminate = String(!total);
     progress.style.setProperty('--progress', String(total ? Math.min(1, done / total) : 0));
     if (working && active) label.textContent = `${removing ? 'Removing' : reordering ? 'Ordering' : 'Saving'} ${done}${total ? ` / ${total}` : '…'}`;
-    const stop = root.querySelector('[data-action=stop]');
+    const stop = /** @type {HTMLButtonElement} */ (root.querySelector('[data-action=stop]'));
     stop.hidden = !working || !active?.id || !['copying', 'removing', 'sorting', 'reordering'].includes(active.phase);
     stop.disabled = Boolean(active?.stopRequested); stop.textContent = active?.stopRequested ? 'Stopping…' : 'Stop';
     if (!stop.hidden && active?.stopRequested) label.textContent = 'Finishing current batch…';
     if (!menu.hidden) buildMenu(entries);
   }
-  let statusRequest = null, statusRevision = 0;
+  let statusRequest = /** @type {Promise<void> | null} */ (null), statusRevision = 0;
   async function refreshStatus() {
     if (statusRequest) return statusRequest;
     const revision = statusRevision;
@@ -298,6 +300,7 @@
     ...sidebarShortcuts,
     { key: 'you', label: 'You', href: '/feed/you' }
   ];
+  /** @returns {HTMLAnchorElement} */
   function createShortcutLink(shortcut, className) {
     const link = element('a', '', className);
     link.dataset.ytMultiselectShortcut = shortcut.key;
@@ -308,7 +311,7 @@
     link.append(element('span', shortcut.label));
     link.addEventListener('click', event => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const native = [...document.querySelectorAll(SELECTORS.guideLinks)].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
+      const native = [.../** @type {NodeListOf<HTMLAnchorElement>} */ (document.querySelectorAll(SELECTORS.guideLinks))].find(anchor => matchesSidebarTarget(anchor.href, shortcut));
       // Reuse YouTube's router when its native entry is mounted. Normal links
       // remain the fallback, including open-in-new-tab and modified clicks.
       if (native) { event.preventDefault(); native.click(); }
@@ -334,9 +337,9 @@
   function mountSidebarShortcuts() {
     // The expanded guide already supplies these links. Only extend the compact rail.
     for (const items of document.querySelectorAll(SELECTORS.miniGuideItems)) {
-      const nativeLinks = [...items.querySelectorAll('a[href]:not(.yt-multiselect-sidebar-link)')];
+      const nativeLinks = [.../** @type {NodeListOf<HTMLAnchorElement>} */ (items.querySelectorAll('a[href]:not(.yt-multiselect-sidebar-link)'))];
       const you = nativeLinks.find(anchor => new URL(anchor.href, location.origin).pathname === '/feed/you')?.closest(SELECTORS.miniGuideEntry);
-      let before = you;
+      let before = /** @type {Element | null} */ (you);
       // Insert in reverse so existing shortcuts stay in place during ordinary scans.
       for (const shortcut of you ? [...sidebarShortcuts].reverse() : sidebarShortcuts) {
         let link = items.querySelector(`[data-yt-multiselect-shortcut="${shortcut.key}"]`);
@@ -383,7 +386,7 @@
           const current = info(row); if (!current || working) return; closePanel(); showMenu(false);
           const choose = !selected.has(current.key), entries = loadedRows();
           const from = entries.findIndex(entry => entry.item.key === lastAnchor), to = entries.findIndex(entry => entry.row === row);
-          const range = event.shiftKey && from >= 0 ? entries.slice(Math.min(from, to), Math.max(from, to) + 1) : [{ item: current }];
+          const range = /** @type {MouseEvent} */ (event).shiftKey && from >= 0 ? entries.slice(Math.min(from, to), Math.max(from, to) + 1) : [{ item: current }];
           for (const entry of range) { if (choose) selected.set(entry.item.key, entry.item); else selected.delete(entry.item.key); }
           lastAnchor = current.key; syncRows();
         }, true);
@@ -426,9 +429,9 @@
   function toggle(value) { enabled = value; bar.hidden = !value; observeTargets(); if (!value) { selected.clear(); lastAnchor = null; clearDrag(); showMenu(false); closeDialog(); closePanel(); notice(''); setSnapshot(null); } scan(); if (value) { maybeIntroduce(); refreshStatus(); if (!snapshot) readPlaylist(); } }
   function selectAll() { const items = snapshot?.complete ? snapshot.items.filter(validVideo).map(canonical) : loadedRows().map(entry => entry.item); for (const item of items) selected.set(item.key, item); syncRows(); }
   function deselect() { selected.clear(); lastAnchor = null; syncRows(); }
-  function menuButtons() { return [...menu.querySelectorAll('button:not(:disabled)')].filter(node => node.getClientRects().length); }
+  function menuButtons() { return [.../** @type {NodeListOf<HTMLButtonElement>} */ (menu.querySelectorAll('button:not(:disabled)'))].filter(node => node.getClientRects().length); }
   function showMenu(value, focus = true) {
-    const trigger = root.querySelector('[data-action="menu"]'); host.toggleAttribute('data-menu-open', value); menu.hidden = !value; trigger.setAttribute('aria-expanded', String(value));
+    const trigger = /** @type {HTMLElement} */ (root.querySelector('[data-action="menu"]')); host.toggleAttribute('data-menu-open', value); menu.hidden = !value; trigger.setAttribute('aria-expanded', String(value));
     if (value) { closePanel(); buildMenu(); refreshStatus(); if (focus) menuButtons()[0]?.focus(); }
   }
   let menuSignature = '';
@@ -527,10 +530,10 @@
     body.append(frame);
   }
   window.addEventListener('message', event => {
-    const frame = backdrop.querySelector('.wl-frame');
+    const frame = /** @type {HTMLIFrameElement | null} */ (backdrop.querySelector('.wl-frame'));
     if (!frame || event.source !== frame.contentWindow || event.origin !== panelOrigin()) return;
     if (event.data?.type === 'WL_CLOSE_PANEL') closeDialog();
-    if (event.data?.type === 'WL_PANEL_FOCUS_CLOSE') backdrop.querySelector('.dialog-header button')?.focus();
+    if (event.data?.type === 'WL_PANEL_FOCUS_CLOSE') /** @type {HTMLElement | null} */ (backdrop.querySelector('.dialog-header button'))?.focus();
   });
   async function copyLinks(items = [...selected.values()]) {
     const text = links(items); if (!text) return;
@@ -574,7 +577,7 @@
         for (const warning of result.warnings || []) output.append(element('p', warning, 'error'));
         const details = element('textarea'); details.readOnly = true; details.setAttribute('aria-label', 'Reader diagnostics');
         details.value = JSON.stringify({ version: chrome.runtime.getManifest().version, complete: result.complete, editable: result.editable, items: result.items.length, pages: result.pages, warnings: result.warnings, structure: result.diagnostics }, null, 2); const disclosure = element('details', '', 'diagnostics'); disclosure.append(element('summary', 'Technical details'), details); output.append(disclosure);
-      } catch (error) { output.replaceChildren(element('p', error.message, 'error')); }
+      } catch (/** @type {any} */ error) { output.replaceChildren(element('p', error.message, 'error')); }
       finally { select.disabled = false; }
     };
     select.addEventListener('change', check);
@@ -595,7 +598,7 @@
   }
   function footer(body, text, handler, danger = false) {
     const foot = element('div', '', 'footer'); foot.append(button('Cancel', closeDialog));
-    if (text) foot.append(button(text, async () => { const controls = [...body.querySelectorAll('button,input,select')]; controls.forEach(node => { node.disabled = true; }); try { await handler(); } catch (error) { if (!body.isConnected || backdrop.hidden) { report(error); return; } let message = body.querySelector('.error'); if (!message) { message = element('p', '', 'error'); body.insertBefore(message, foot); } message.textContent = error.message; } finally { controls.forEach(node => { node.disabled = false; }); } }, `text ${danger ? 'danger' : 'primary'}`));
+    if (text) foot.append(button(text, async () => { const controls = [...body.querySelectorAll('button,input,select')]; controls.forEach(node => { node.disabled = true; }); try { await handler(); } catch (/** @type {any} */ error) { if (!body.isConnected || backdrop.hidden) { report(error); return; } let message = body.querySelector('.error'); if (!message) { message = element('p', '', 'error'); body.insertBefore(message, foot); } message.textContent = error.message; } finally { controls.forEach(node => { node.disabled = false; }); } }, `text ${danger ? 'danger' : 'primary'}`));
     else foot.firstChild.textContent = 'Close'; body.append(foot); return foot;
   }
   function listVideos(body, items, limit = 6) { const list = element('ol', '', 'videos'); for (const item of items.slice(0, limit)) list.append(element('li', item.title || item.videoId)); body.append(list); if (items.length > limit) body.append(element('p', `And ${items.length - limit} more…`, 'note')); }
@@ -675,7 +678,7 @@
   function compact(title) {
     closeDialog(); showMenu(false); notice(''); panel.replaceChildren(); panel.hidden = false; host.setAttribute('data-panel-open', '');
     panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', title); panel.tabIndex = -1;
-    const header = element('div', '', 'dialog-header'), close = button('', () => { closePanel(); root.querySelector('[data-action="menu"]').focus(); }, 'icon');
+    const header = element('div', '', 'dialog-header'), close = button('', () => { closePanel(); /** @type {HTMLElement} */ (root.querySelector('[data-action="menu"]')).focus(); }, 'icon');
     close.innerHTML = svg('close'); close.setAttribute('aria-label', 'Close panel'); header.append(element('h2', title), close); panel.append(header); panel.focus(); return panel;
   }
   function compactActions(body, label, handler, danger = false) {
@@ -721,7 +724,7 @@
     try {
       let result;
       try { result = await send(type, args); }
-      catch (error) {
+      catch (/** @type {any} */ error) {
         if (!['TRANSFER', 'PASTE'].includes(type)) throw error;
         const { activeJob } = await send('STATUS');
         if (!error.jobId || activeJob?.id !== error.jobId || activeJob.targetId !== args.targetId || (args.playlistId && activeJob.sourceId !== args.playlistId)) throw error;
@@ -755,6 +758,7 @@
     body.append(button('Download timings', () => download('youtube-operation-timings.json', JSON.stringify(entries || [], null, 2))));
     footer(body);
   }
+  /** @param {any} kind @param {any} [savedQueue] */
   async function transferDialog(kind, savedQueue = null) {
     const selection = savedQueue ? [...savedQueue.items] : [...selected.values()]; if (!selection.length) return;
     const capturedScope = scope, sourceId = savedQueue ? savedQueue.sourceId : playlistId(), args = !savedQueue && exactSelection() ? selectionArgs() : null;
@@ -836,8 +840,8 @@
     footer(body);
   }
 
-  const actions = { stop: stopOperation, close: () => toggle(false), all: () => root.querySelector('[data-action=all]').getAttribute('aria-checked') === 'true' ? deselect() : selectAll(), save: saveDialog, clear: deselect, links: () => copyLinks(), menu: () => showMenu(menu.hidden) };
-  root.addEventListener('click', event => { const action = event.target.closest?.('[data-action]')?.dataset.action; if (action) Promise.resolve().then(actions[action]).catch(report); });
+  const actions = { stop: stopOperation, close: () => toggle(false), all: () => /** @type {Element} */ (root.querySelector('[data-action=all]')).getAttribute('aria-checked') === 'true' ? deselect() : selectAll(), save: saveDialog, clear: deselect, links: () => copyLinks(), menu: () => showMenu(menu.hidden) };
+  root.addEventListener('click', event => { const action = /** @type {HTMLElement | null | undefined} */ (/** @type {Element} */ (event.target).closest?.('[data-action]'))?.dataset.action; if (action) Promise.resolve().then(actions[action]).catch(report); });
   backdrop.addEventListener('click', event => { if (event.target === backdrop) closeDialog(); });
   document.addEventListener('click', event => { if (!event.composedPath().includes(host)) { showMenu(false); closePanel(); } });
   for (const type of ['pointerdown', 'mousedown']) document.addEventListener(type, event => {
@@ -856,10 +860,10 @@
   for (const type of ['dragenter', 'dragover']) document.addEventListener(type, event => {
     if (!enabled || !groupDrag || working) return;
     event.preventDefault(); event.stopImmediatePropagation();
-    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (/** @type {DragEvent} */ (event).dataTransfer) /** @type {DataTransfer} */ (/** @type {DragEvent} */ (event).dataTransfer).dropEffect = 'move';
     const target = dragTarget(event); clearDrop();
-    if (target) { dropRow = target.row; dropRow.classList.add(target.after ? 'yt-multiselect-drop-after' : 'yt-multiselect-drop-before'); }
-    scrollSpeed = event.clientY < 72 ? -14 : event.clientY > innerHeight - 100 ? 14 : 0;
+    if (target) { dropRow = /** @type {Element} */ (target.row); dropRow.classList.add(target.after ? 'yt-multiselect-drop-after' : 'yt-multiselect-drop-before'); }
+    scrollSpeed = /** @type {DragEvent} */ (event).clientY < 72 ? -14 : /** @type {DragEvent} */ (event).clientY > innerHeight - 100 ? 14 : 0;
     if (scrollSpeed && scrollFrame === null) scrollFrame = requestAnimationFrame(dragScroll);
   }, true);
   document.addEventListener('drop', event => {
@@ -872,34 +876,34 @@
   document.addEventListener('dragend', () => { if (groupDrag) clearDrag(); }, true);
   document.addEventListener('keydown', event => {
     if (groupDrag && event.key === 'Escape') { clearDrag(); return; }
-    if (!panel.hidden && event.key === 'Escape') { event.preventDefault(); closePanel(); root.querySelector('[data-action="menu"]').focus(); return; }
+    if (!panel.hidden && event.key === 'Escape') { event.preventDefault(); closePanel(); /** @type {HTMLElement} */ (root.querySelector('[data-action="menu"]')).focus(); return; }
     if (!backdrop.hidden) {
       if (event.key === 'Escape') { event.preventDefault(); closeDialog(); return; }
-      if (event.key === 'Tab') { const nodes = [...backdrop.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,summary,iframe')].filter(node => node.getClientRects().length); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1], active = root.activeElement; if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
+      if (event.key === 'Tab') { const nodes = [.../** @type {NodeListOf<HTMLElement>} */ (backdrop.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea,summary,iframe'))].filter(node => node.getClientRects().length); if (!nodes.length) return; const first = nodes[0], last = nodes[nodes.length - 1], active = /** @type {HTMLElement} */ (root.activeElement); if (event.shiftKey && (active === first || !nodes.includes(active))) { event.preventDefault(); last.focus(); } else if (!event.shiftKey && (active === last || !nodes.includes(active))) { event.preventDefault(); first.focus(); } }
       return;
     }
     if (!menu.hidden && ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Escape'].includes(event.key)) {
       event.preventDefault();
-      if (event.key === 'Escape') { showMenu(false); root.querySelector('[data-action="menu"]').focus(); return; }
-      const nodes = menuButtons(), at = nodes.indexOf(root.activeElement);
+      if (event.key === 'Escape') { showMenu(false); /** @type {HTMLElement} */ (root.querySelector('[data-action="menu"]')).focus(); return; }
+      const nodes = menuButtons(), at = nodes.indexOf(/** @type {HTMLButtonElement} */ (root.activeElement));
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? nodes.length - 1 : (at + (event.key === 'ArrowUp' ? -1 : 1) + nodes.length) % nodes.length;
       nodes[next]?.focus(); return;
     }
-    if (!enabled || working || event.composedPath().some(node => node instanceof Element && (node.matches('input,textarea,select') || node.isContentEditable))) return;
+    if (!enabled || working || event.composedPath().some(node => node instanceof Element && (node.matches('input,textarea,select') || /** @type {HTMLElement} */ (node).isContentEditable))) return;
     if (event.key === 'Escape') { showMenu(false); return; }
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase(), handler = key === 'c' && event.shiftKey && selected.size ? () => queueSelection('copy') : key === 'c' && selected.size ? () => copyLinks() : key === 'x' && exactSelection() && snapshot.editable ? cutDialog : key === 'v' && playlistId() ? pasteDialog : key === 'a' ? selectAll : null;
     if (handler) { event.preventDefault(); Promise.resolve().then(handler).catch(report); }
   });
   const pageObserver = new MutationObserver(mutations => {
-    if (mutations.every(mutation => mutation.target === host || mutation.target === toggleButton || mutation.target.closest?.('#yt-multiselect-toggle,#yt-watch-later-controls') || [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1 || node.classList?.contains('yt-multiselect-checkbox')))) return;
-    if (!enabled && !mutations.some(mutation => mutation.target.closest?.(SELECTORS.chrome) || [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 && (node === host || node.matches(SELECTORS.chrome) || node.querySelector(SELECTORS.chrome))))) return;
+    if (mutations.every(mutation => mutation.target === host || mutation.target === toggleButton || /** @type {Element} */ (mutation.target).closest?.('#yt-multiselect-toggle,#yt-watch-later-controls') || [...mutation.addedNodes, ...mutation.removedNodes].every(node => node.nodeType !== 1 || /** @type {Element} */ (node).classList?.contains('yt-multiselect-checkbox')))) return;
+    if (!enabled && !mutations.some(mutation => /** @type {Element} */ (mutation.target).closest?.(SELECTORS.chrome) || [...mutation.addedNodes, ...mutation.removedNodes].some(node => node.nodeType === 1 && (node === host || /** @type {Element} */ (node).matches(SELECTORS.chrome) || /** @type {Element} */ (node).querySelector(SELECTORS.chrome))))) return;
     // Coalesce into one pending scan without postponing it through continuous renders.
     if (!timer) timer = setTimeout(() => { timer = null; scan(); }, enabled ? 120 : 0);
   });
   // Watch YouTube's page area and header/guide rails instead of the whole body.
   // Falls back to the body until those containers exist, then re-targets.
-  let observing = null;
+  let observing = /** @type {Element[] | null} */ (null);
   function observeTargets() {
     let found = [...new Set([...document.querySelectorAll(`${SELECTORS.pageManager},${SELECTORS.masthead},${SELECTORS.miniGuide},${SELECTORS.guideDrawer}`)])];
     // Without the page container (unknown layout) watch the whole body rather than miss rows.
@@ -907,7 +911,7 @@
     // While multiselect is off only the header/guide rails matter (toggle and shortcuts), so skip
     // the busy page area. Keep it if no rail exists yet; yt-navigate-finish re-targets later.
     else if (!enabled) { const rails = found.filter(node => !node.matches(SELECTORS.pageManager)); if (rails.length) found = rails; }
-    if (observing && found.length === observing.length && found.every((node, index) => node === observing[index])) return;
+    if (observing && found.length === observing.length && found.every((node, index) => node === /** @type {Element[]} */ (observing)[index])) return;
     pageObserver.disconnect();
     observing = found;
     for (const node of found.length ? found : [document.body || document.documentElement]) pageObserver.observe(node, { childList: true, subtree: true });
@@ -921,8 +925,8 @@
     if (!changes.activeJob && !changes.queue && !changes.history && !changes.historyCount) return;
     statusRevision++;
     for (const key of ['activeJob', 'queue']) if (changes[key]) operationStatus[key] = changes[key].newValue || null;
-    if (changes.historyCount) operationStatus.historyCount = changes.historyCount.newValue;
-    else if (changes.history) operationStatus.historyCount = changes.history.newValue?.length || 0;
+    if (changes.historyCount) operationStatus.historyCount = /** @type {number | undefined} */ (changes.historyCount.newValue);
+    else if (changes.history) operationStatus.historyCount = /** @type {any[] | undefined} */ (changes.history.newValue)?.length || 0;
     update();
   });
   scan();

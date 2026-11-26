@@ -6,6 +6,7 @@ import { measure, newTimings } from './timings.js';
 import { assertAccount, exactItems, copyItems, removeItems, assertCopied, counts, reorderPlan, sortPlan, reorderItems } from './operations.js';
 
 let busy = false;
+/** @type {{ jobId: string | null, stopRequested: boolean } | null} */
 let running = null;
 let timingWrites = Promise.resolve();
 let lastEditAt = 0;
@@ -32,7 +33,7 @@ async function readPlaylist(tabId, playlistId, pickerVideoId, expectedFingerprin
 }
 
 async function savedProbe() {
-  const { queue, activeJob, history = [] } = await chrome.storage.local.get(['queue', 'activeJob', 'history']);
+  const { queue, activeJob, history = [] } = /** @type {Record<string, any>} */ (await chrome.storage.local.get(['queue', 'activeJob', 'history']));
   return [queue, activeJob, ...history].flatMap(job => [job?.probeVideoId, ...(job?.items || []).map(item => item.videoId)]).find(validVideo);
 }
 
@@ -52,12 +53,12 @@ async function api(tabId, command, timings) {
 
 async function save(job) {
   job.updatedAt = Date.now();
-  job.stopRequested = running?.jobId === job.id && running.stopRequested || job.stopRequested || false;
+  job.stopRequested = running?.jobId === job.id && /** @type {NonNullable<typeof running>} */ (running).stopRequested || job.stopRequested || false;
   await measure(job.timings, 'storage', () => saveJob(chrome.storage.local, job));
 }
 
 async function archive(job) {
-  const { queue } = await chrome.storage.local.get('queue');
+  const { queue } = /** @type {Record<string, any>} */ (await chrome.storage.local.get('queue'));
   const clearCut = job.phase === 'completed' && job.kind === 'move' && queue?.kind === 'move' && queue.sourceId === job.sourceId && JSON.stringify(queue.items.map(item => item.setVideoId)) === JSON.stringify(job.items.map(item => item.setVideoId));
   await measure(job.timings, 'storage', () => archiveJob(chrome.storage.local, job, clearCut));
 }
@@ -75,7 +76,7 @@ async function run(message) {
     busy = true;
     const timings = newTimings();
     try {
-      const stored = await chrome.storage.local.get(['activeJob', 'history']);
+      const stored = /** @type {Record<string, any>} */ (await chrome.storage.local.get(['activeJob', 'history']));
       const record = [stored.activeJob, ...(stored.history || [])].find(job => job?.id === message.jobId);
       if (!record) return { updated: false };
       const [job] = await hydrateJobs(chrome.storage.local, [record]);
@@ -97,7 +98,7 @@ async function run(message) {
   if (message.type === 'PLAYLISTS') return api(message.tabId, { type: 'playlists', videoId: message.videoId || await savedProbe() });
   if (message.type === 'STATUS') {
     if (message.detailed) {
-      const stored = await chrome.storage.local.get(['activeJob', 'history', 'queue']);
+      const stored = /** @type {Record<string, any>} */ (await chrome.storage.local.get(['activeJob', 'history', 'queue']));
       const [activeJob, ...history] = await hydrateJobs(chrome.storage.local, [stored.activeJob, ...(stored.history || [])]);
       return { ...stored, activeJob, history, busy };
     }
@@ -109,7 +110,7 @@ async function run(message) {
       return { ...rest, sourceBefore: title(sourceBefore), targetBefore: title(targetBefore) };
     };
     [stored.activeJob] = await hydrateJobs(chrome.storage.local, [stored.activeJob], ['items']);
-    const historyCount = stored.historyCount ?? (await chrome.storage.local.get('history')).history?.length ?? 0;
+    const historyCount = stored.historyCount ?? /** @type {Record<string, any>} */ (await chrome.storage.local.get('history')).history?.length ?? 0;
     return { activeJob: summary(stored.activeJob), queue: summary(stored.queue), historyCount, busy };
   }
   if (message.type === 'QUEUE') {
@@ -133,7 +134,7 @@ async function run(message) {
     if (busy) throw new Error('Wait for the current step to finish.');
     busy = true;
     try {
-      let { activeJob } = await chrome.storage.local.get('activeJob');
+      let { activeJob } = /** @type {Record<string, any>} */ (await chrome.storage.local.get('activeJob'));
       [activeJob] = await hydrateJobs(chrome.storage.local, [activeJob]);
       if (message.jobId && message.jobId !== activeJob?.id) throw new Error('The saved operation changed.');
       if (activeJob) { activeJob.phase = 'stopped'; await archive(activeJob); }
@@ -198,6 +199,7 @@ async function run(message) {
     if (pasted && message.expectedQueueId !== queue.id) throw new Error('The saved selection changed. Review Paste again.');
     const sourceId = pasted ? queue.sourceId : message.playlistId;
     const kind = message.type === 'REMOVE' ? 'remove' : message.type === 'SORT' ? 'sort' : message.type === 'REORDER' ? 'reorder' : pasted ? queue.kind : message.kind === 'move' ? 'move' : 'copy';
+    /** @type {any} */
     let source = null;
     let prefetchedTarget = null;
     let items;
@@ -218,7 +220,7 @@ async function run(message) {
         ]);
         const failure = results.find(result => result.status === 'rejected');
         if (failure) throw failure.reason;
-        [source, prefetchedTarget] = results.map(result => result.value);
+        [source, prefetchedTarget] = results.map(result => /** @type {PromiseFulfilledResult<any>} */ (result).value);
       } else {
         source = await read(message.tabId, sourceId, undefined, pasted ? queue.fingerprint : message.expectedFingerprint, timings);
       }
@@ -276,8 +278,8 @@ async function run(message) {
       await archive(job);
     }
     return { job };
-  } catch (error) {
-    if (job && (await chrome.storage.local.get('activeJob')).activeJob?.id === job.id) {
+  } catch (/** @type {any} */ error) {
+    if (job && (/** @type {Record<string, any>} */ (await chrome.storage.local.get('activeJob'))).activeJob?.id === job.id) {
       job.phase = error.code === 'STOPPED' ? 'stopped' : 'interrupted'; job.error = error.message; await save(job);
       if (error.code === 'STOPPED') return { job, stopped: true };
       error.jobId = job.id;
@@ -294,7 +296,7 @@ async function recordTimings(timings, kind, phase) {
   const entry = structuredClone({ ...timings, kind, phase });
   timingWrites = timingWrites.then(async () => {
     try {
-      const { performanceLog = [] } = await chrome.storage.local.get('performanceLog');
+      const { performanceLog = [] } = /** @type {Record<string, any>} */ (await chrome.storage.local.get('performanceLog'));
       await chrome.storage.local.set({ performanceLog: [entry, ...performanceLog].slice(0, 20) });
     } catch { /* Optional metrics must never change a verified mutation outcome. */ }
   });

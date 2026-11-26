@@ -2,6 +2,7 @@
  * Unknown, partially loaded, concurrently changed, and newly added rows require
  * a user-controlled refresh. No playlist/network mutations occur here.
  */
+/** @param {{ before: any, after: any }} args */
 export async function youtubeRefresh({ before, after }) {
   const fail = () => ({ updated: false });
   const currentPlaylist = () => location.pathname === '/playlist' && new URL(location.href).searchParams.get('list') === after?.playlistId;
@@ -12,15 +13,15 @@ export async function youtubeRefresh({ before, after }) {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed));
   const fingerprint = [...new Uint8Array(hash)].map(value => value.toString(16).padStart(2, '0')).join('');
   if (fingerprint !== after.fingerprint || !currentPlaylist()) return fail();
-  const lists = [...document.querySelectorAll('ytd-playlist-video-list-renderer')].filter(node => node.getClientRects().length && !node.closest('[hidden],[aria-hidden=true]'));
+  const lists = [.../** @type {NodeListOf<PolymerElement>} */ (document.querySelectorAll('ytd-playlist-video-list-renderer'))].filter(node => node.getClientRects().length && !node.closest('[hidden],[aria-hidden=true]'));
   if (lists.length !== 1) return fail();
   const list = lists[0], contents = list.data?.contents;
   if (typeof list.set !== 'function' || !Array.isArray(contents) || contents.some(entry => !entry.playlistVideoRenderer?.setVideoId)) return fail();
   const same = (entries, items) => entries.length === items.length && entries.every((entry, index) => entry.playlistVideoRenderer.setVideoId === items[index].setVideoId && entry.playlistVideoRenderer.videoId === items[index].videoId);
   const renderedMatches = () => {
-    const rows = [...list.querySelectorAll('ytd-playlist-video-renderer')];
+    const rows = [.../** @type {NodeListOf<PolymerElement>} */ (list.querySelectorAll('ytd-playlist-video-renderer'))];
     return rows.length === after.items.length && rows.every((row, index) => {
-      const anchor = row.querySelector?.('a#video-title,a[href*="watch?v="]');
+      const anchor = /** @type {HTMLAnchorElement | null | undefined} */ (row.querySelector?.('a#video-title,a[href*="watch?v="]'));
       if (!anchor || row.data?.setVideoId !== after.items[index].setVideoId) return false;
       const url = new URL(anchor.href, location.href);
       const ordinal = url.searchParams.get('index') || row.querySelector('#index')?.textContent.trim();
@@ -28,7 +29,7 @@ export async function youtubeRefresh({ before, after }) {
     });
   };
   // Count changes need a recognized native header as well as the list model.
-  const header = [...document.querySelectorAll('ytd-playlist-header-renderer')].find(node => node.getClientRects().length && !node.closest('[hidden]'));
+  const header = [.../** @type {NodeListOf<PolymerElement>} */ (document.querySelectorAll('ytd-playlist-header-renderer'))].find(node => node.getClientRects().length && !node.closest('[hidden]'));
   const countText = header?.data?.numVideosText;
   const changesCount = before.items.length !== after.items.length;
   if (changesCount && (typeof header?.set !== 'function' || !Array.isArray(countText?.runs) || !/^[\d,\.\s]+$/.test(countText.runs[0]?.text || ''))) return fail();
@@ -58,7 +59,7 @@ export async function youtubeRefresh({ before, after }) {
     if (changesCount) {
       const count = structuredClone(countText); count.runs[0].text = after.items.length.toLocaleString();
       if (/^ videos?$/.test(count.runs[1]?.text || '')) count.runs[1].text = after.items.length === 1 ? ' video' : ' videos';
-      header.set('data.numVideosText', count);
+      /** @type {PolymerElement} */ (header).set('data.numVideosText', count);
     }
     // Give Polymer its render turn, then verify both model and visible rows.
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -67,7 +68,7 @@ export async function youtubeRefresh({ before, after }) {
     return { updated: true };
   } catch {
     if (currentPlaylist() && list.data.contents === next) {
-      try { list.set('data.contents', contents); if (changesCount) header.set('data.numVideosText', oldCount); } catch {}
+      try { list.set('data.contents', contents); if (changesCount) /** @type {PolymerElement} */ (header).set('data.numVideosText', oldCount); } catch {}
     }
     return fail();
   }
